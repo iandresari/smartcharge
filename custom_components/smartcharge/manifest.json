@@ -1,11 +1,15 @@
-﻿{
+{
   "domain": "smartcharge",
   "name": "SmartCharge - EV Charging Station Monitor",
-  "codeowners": ["@iandresari"],
+  "codeowners": [
+    "@iandresari"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/iandresari/smartcharge",
   "issue_tracker": "https://github.com/iandresari/smartcharge/issues",
-  "requirements": ["aiohttp>=3.8.0"],
+  "requirements": [
+    "aiohttp>=3.8.0"
+  ],
   "version": "1.0.1",
   "iot_class": "cloud_polling",
   "quality_scale": "custom"
