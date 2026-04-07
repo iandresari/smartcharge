@@ -1,4 +1,5 @@
 """Binary sensor entities for EnBW Charging integration."""
+
 from __future__ import annotations
 
 import logging
@@ -79,7 +80,9 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class ChargePointAvailabilityBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class ChargePointAvailabilityBinarySensor(
+    CoordinatorEntity, BinarySensorEntity
+):
     """Binary sensor for charge point availability."""
 
     _attr_has_entity_name = True

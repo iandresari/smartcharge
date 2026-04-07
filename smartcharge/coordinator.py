@@ -1,4 +1,5 @@
 """Data coordinator for EnBW Charging integration."""
+
 from __future__ import annotations
 
 import asyncio
@@ -41,9 +42,7 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(
-                seconds=DEFAULT_UPDATE_INTERVAL
-            ),
+            update_interval=timedelta(seconds=DEFAULT_UPDATE_INTERVAL),
         )
         self.session = session
         self.entry = entry
@@ -72,7 +71,9 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
                         await self._update_occupancy_history(station_id, data)
                 except Exception as err:
                     _LOGGER.error(
-                        "Error fetching data for station %s: %s", station_id, err
+                        "Error fetching data for station %s: %s",
+                        station_id,
+                        err,
                     )
 
             return {
@@ -82,15 +83,21 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
             }
 
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with EnBW API: {err}") from err
+            raise UpdateFailed(
+                f"Error communicating with EnBW API: {err}"
+            ) from err
 
-    async def _fetch_station_data(self, station_id: str) -> dict[str, Any] | None:
+    async def _fetch_station_data(
+        self, station_id: str
+    ) -> dict[str, Any] | None:
         """Fetch data for a single charging station."""
         url = f"{API_BASE_URL}/chargestations/{station_id}"
 
         try:
             async with self.session.get(
-                url, headers=API_HEADERS, timeout=aiohttp.ClientTimeout(total=10)
+                url,
+                headers=API_HEADERS,
+                timeout=aiohttp.ClientTimeout(total=10),
             ) as response:
                 if response.status == 200:
                     data = await response.json()
@@ -122,7 +129,10 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
             evse_id = cp.get("evseId")
             status = cp.get("status")
             if evse_id:
-                occupancy_per_point[evse_id] = {"status": status, "timestamp": now}
+                occupancy_per_point[evse_id] = {
+                    "status": status,
+                    "timestamp": now,
+                }
 
         # Keep only last 24 hours of data per point
         cutoff_time = now - timedelta(hours=24)

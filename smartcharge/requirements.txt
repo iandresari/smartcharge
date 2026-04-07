@@ -1,3 +1,0 @@
-# Production Requirements
-
-aiohttp>=3.8.0

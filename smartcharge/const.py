@@ -1,4 +1,5 @@
 """Constants for the SmartCharge integration."""
+
 from typing import Final
 
 DOMAIN: Final = "smartcharge"

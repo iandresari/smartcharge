@@ -1,4 +1,5 @@
 """Sensor entities for EnBW Charging integration."""
+
 from __future__ import annotations
 
 import logging
@@ -196,7 +197,9 @@ class StationOccupancySensor(CoordinatorEntity, SensorEntity):
         weekday_occupancy = self.coordinator.get_occupancy_by_weekday(
             self.station_id
         )
-        hourly_occupancy = self.coordinator.get_occupancy_by_hour(self.station_id)
+        hourly_occupancy = self.coordinator.get_occupancy_by_hour(
+            self.station_id
+        )
 
         return {
             ATTR_OCCUPANCY_WEEKDAY: weekday_occupancy,

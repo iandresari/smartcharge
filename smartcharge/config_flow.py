@@ -1,4 +1,5 @@
 """Config flow for EnBW Charging integration."""
+
 from __future__ import annotations
 
 import asyncio
@@ -50,9 +51,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        "action", default="browse"
-                    ): vol.In(
+                    vol.Required("action", default="browse"): vol.In(
                         {
                             "browse": "Browse Map & Enter Station ID",
                             "manual": "Enter Station ID Directly",
@@ -100,7 +99,9 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 try:
                     # Fetch and validate station
-                    self.station_data = await self._fetch_station_details(station_id)
+                    self.station_data = await self._fetch_station_details(
+                        station_id
+                    )
                     return await self.async_step_select_charge_points()
 
                 except ConnectionError as err:
@@ -144,9 +145,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_show_form(
                     step_id="select_charge_points",
                     data_schema=self._build_charge_points_schema(),
-                    errors={
-                        "base": "no_charge_points_selected"
-                    },
+                    errors={"base": "no_charge_points_selected"},
                 )
 
             self.selected_charge_points = selected
@@ -156,15 +155,9 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="select_charge_points",
             data_schema=self._build_charge_points_schema(),
             description_placeholders={
-                "station_name": self.station_data.get(
-                    "name", "Unknown"
-                ),
+                "station_name": self.station_data.get("name", "Unknown"),
                 "charge_point_count": str(
-                    len(
-                        self.station_data.get(
-                            "charge_points", []
-                        )
-                    )
+                    len(self.station_data.get("charge_points", []))
                 ),
             },
         )
@@ -188,7 +181,9 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return vol.Schema(
             {
-                vol.Required("charge_points"): cv.multi_select(charge_point_options),
+                vol.Required("charge_points"): cv.multi_select(
+                    charge_point_options
+                ),
             }
         )
 
@@ -203,20 +198,23 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             return self.async_create_entry(
-                title=(
-                    f"EnBW - "
-                    f"{self.station_data.get(
+                title=(f"EnBW - " f"{self.station_data.get(
                         'name', 'Charging Station'
-                    )}"
-                ),
+                    )}"),
                 data={
                     CONF_CHARGING_STATIONS: [
                         {
-                            CONF_STATION_ID: self.station_data.get("station_id"),
+                            CONF_STATION_ID: self.station_data.get(
+                                "station_id"
+                            ),
                             CONF_STATION_NAME: self.station_data.get("name"),
                             "charge_points": [
-                                cp for cp in self.station_data.get("charge_points", [])
-                                if cp.get("evse_id") in self.selected_charge_points
+                                cp
+                                for cp in self.station_data.get(
+                                    "charge_points", []
+                                )
+                                if cp.get("evse_id")
+                                in self.selected_charge_points
                             ],
                         }
                     ],
@@ -240,7 +238,9 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="configure_settings",
             data_schema=schema,
             description_placeholders={
-                "update_interval_description": "How often to fetch data (60-3600 seconds)"
+                "update_interval_description": (
+                    "How often to fetch data" " (60-3600 seconds)"
+                )
             },
         )
 
@@ -269,7 +269,9 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     charge_points.append(
                         {
                             "evse_id": cp.get("evseId"),
-                            "name": cp.get("evse", {}).get("name", cp.get("evseId")),
+                            "name": cp.get("evse", {}).get(
+                                "name", cp.get("evseId")
+                            ),
                             "connector_type": cp.get("connectorType"),
                             "power": cp.get("powerKw"),
                             "status": cp.get("status"),
@@ -285,7 +287,9 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
 
         except asyncio.TimeoutError as err:
-            raise ConnectionError("Request timed out. Please try again.") from err
+            raise ConnectionError(
+                "Request timed out. Please try again."
+            ) from err
         except Exception as err:
             _LOGGER.error("Error fetching station details: %s", err)
             raise
@@ -318,9 +322,7 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Handle options."""
         if user_input is not None:
-            return self.async_create_entry(
-                title="", data=user_input
-            )
+            return self.async_create_entry(title="", data=user_input)
 
         update_interval = self.config_entry.data.get(
             CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
@@ -360,7 +362,9 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
                     errors["base"] = "station_exists"
                 else:
                     try:
-                        station_data = await self._fetch_station_details(station_id)
+                        station_data = await self._fetch_station_details(
+                            station_id
+                        )
 
                         current_stations.append(
                             {
@@ -398,7 +402,9 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
         session = async_get_clientsession(self.hass)
         url = f"{API_BASE_URL}/chargestations/{station_id}"
 
-        async with session.get(url, headers=API_HEADERS, timeout=10) as response:
+        async with session.get(
+            url, headers=API_HEADERS, timeout=10
+        ) as response:
             if response.status != 200:
                 raise ConnectionError(
                     f"Station not found (HTTP {response.status})"
@@ -412,7 +418,9 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
                 charge_points.append(
                     {
                         "evse_id": cp.get("evseId"),
-                        "name": cp.get("evse", {}).get("name", cp.get("evseId")),
+                        "name": cp.get("evse", {}).get(
+                            "name", cp.get("evseId")
+                        ),
                         "connector_type": cp.get("connectorType"),
                         "power": cp.get("powerKw"),
                     }
@@ -426,6 +434,6 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
 
 
 # Link options flow with config flow
-EnBWChargingConfigFlow.async_get_options_flow = lambda config_entry: EnBWChargingOptionsFlow(
-    config_entry
+EnBWChargingConfigFlow.async_get_options_flow = (
+    lambda config_entry: EnBWChargingOptionsFlow(config_entry)
 )

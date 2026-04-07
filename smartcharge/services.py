@@ -1,4 +1,5 @@
 """Services for EnBW Charging integration."""
+
 from __future__ import annotations
 
 import logging
@@ -143,7 +144,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         schema={
             "type": "object",
             "properties": {
-                CONF_STATION_ID: {"type": "string", "description": "Station ID"},
+                CONF_STATION_ID: {
+                    "type": "string",
+                    "description": "Station ID",
+                },
             },
             "required": [CONF_STATION_ID],
         },
