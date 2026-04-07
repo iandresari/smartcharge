@@ -7,7 +7,6 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
@@ -51,17 +50,27 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required("action", default="browse"): vol.In(
-                        {"browse": "Browse Map & Enter Station ID", "manual": "Enter Station ID Directly"}
+                    vol.Required(
+                        "action", default="browse"
+                    ): vol.In(
+                        {
+                            "browse": "Browse Map & Enter Station ID",
+                            "manual": "Enter Station ID Directly",
+                        }
                     ),
                 }
             ),
             description_placeholders={
-                "map_url": "https://www.enbw.com/elektromobilitaet/produkte/mobilityplus-app/ladestation-finden/map"
+                "map_url": (
+                    "https://www.enbw.com/elektromobilitaet/produkte/"
+                    "mobilityplus-app/ladestation-finden/map"
+                )
             },
         )
 
-    async def async_step_browse_map(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_browse_map(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         """Direct user to EnBW map to find station."""
         if user_input is not None:
             return await self.async_step_enter_station_id()
@@ -70,7 +79,10 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="browse_map",
             data_schema=vol.Schema({}),
             description_placeholders={
-                "map_url": "https://www.enbw.com/elektromobilitaet/produkte/mobilityplus-app/ladestation-finden/map"
+                "map_url": (
+                    "https://www.enbw.com/elektromobilitaet/produkte/"
+                    "mobilityplus-app/ladestation-finden/map"
+                )
             },
         )
 
@@ -105,12 +117,17 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="enter_station_id",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_STATION_ID): vol.All(str, vol.Length(min=1)),
+                    vol.Required(CONF_STATION_ID): vol.All(
+                        str, vol.Length(min=1)
+                    ),
                 }
             ),
             errors=errors,
             description_placeholders={
-                "map_url": "https://www.enbw.com/elektromobilitaet/produkte/mobilityplus-app/ladestation-finden/map"
+                "map_url": (
+                    "https://www.enbw.com/elektromobilitaet/produkte/"
+                    "mobilityplus-app/ladestation-finden/map"
+                )
             },
         )
 
@@ -127,7 +144,9 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_show_form(
                     step_id="select_charge_points",
                     data_schema=self._build_charge_points_schema(),
-                    errors={"base": "no_charge_points_selected"},
+                    errors={
+                        "base": "no_charge_points_selected"
+                    },
                 )
 
             self.selected_charge_points = selected
@@ -137,8 +156,16 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="select_charge_points",
             data_schema=self._build_charge_points_schema(),
             description_placeholders={
-                "station_name": self.station_data.get("name", "Unknown"),
-                "charge_point_count": str(len(self.station_data.get("charge_points", []))),
+                "station_name": self.station_data.get(
+                    "name", "Unknown"
+                ),
+                "charge_point_count": str(
+                    len(
+                        self.station_data.get(
+                            "charge_points", []
+                        )
+                    )
+                ),
             },
         )
 
@@ -171,11 +198,17 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Configure general settings like update interval."""
         if user_input is not None:
             update_interval = user_input.get(
-                CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+                CONF_UPDATE_INTERVAL,
+                DEFAULT_UPDATE_INTERVAL,
             )
 
             return self.async_create_entry(
-                title=f"EnBW - {self.station_data.get('name', 'Charging Station')}",
+                title=(
+                    f"EnBW - "
+                    f"{self.station_data.get(
+                        'name', 'Charging Station'
+                    )}"
+                ),
                 data={
                     CONF_CHARGING_STATIONS: [
                         {
@@ -194,8 +227,12 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema(
             {
                 vol.Optional(
-                    CONF_UPDATE_INTERVAL, default=DEFAULT_UPDATE_INTERVAL
-                ): vol.All(vol.Coerce(int), vol.Range(min=60, max=3600)),
+                    CONF_UPDATE_INTERVAL,
+                    default=DEFAULT_UPDATE_INTERVAL,
+                ): vol.All(
+                    vol.Coerce(int),
+                    vol.Range(min=60, max=3600),
+                ),
             }
         )
 
@@ -281,9 +318,10 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Handle options."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            return self.async_create_entry(
+                title="", data=user_input
+            )
 
-        current_stations = self.config_entry.data.get(CONF_CHARGING_STATIONS, [])
         update_interval = self.config_entry.data.get(
             CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
         )

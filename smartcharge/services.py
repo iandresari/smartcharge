@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers.entity_component import EntityComponent
 
 from .const import (
     CONF_CHARGING_STATIONS,
@@ -122,13 +120,19 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         schema={
             "type": "object",
             "properties": {
-                CONF_STATION_ID: {"type": "string", "description": "Station ID"},
+                CONF_STATION_ID: {
+                    "type": "string",
+                    "description": "Station ID",
+                },
                 CONF_STATION_NAME: {
                     "type": "string",
                     "description": "Station display name",
                 },
             },
-            "required": [CONF_STATION_ID, CONF_STATION_NAME],
+            "required": [
+                CONF_STATION_ID,
+                CONF_STATION_NAME,
+            ],
         },
     )
 
