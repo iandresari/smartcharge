@@ -48,7 +48,7 @@ jobs:
           pip install flake8 black
 
       - name: Run Black
-        run: black --check smartcharge/
+        run: black --check custom_components/smartcharge/
 
       - name: Run flake8
-        run: flake8 smartcharge/
+        run: flake8 custom_components/smartcharge/
