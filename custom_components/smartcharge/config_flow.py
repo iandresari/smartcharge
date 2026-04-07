@@ -273,6 +273,8 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         except asyncio.TimeoutError as err:
             raise ConnectionError("Request timed out. Please try again.") from err
+        except (ConnectionError, ValueError):
+            raise
         except Exception as err:
             _LOGGER.error("Error fetching station details: %s", err)
             raise
