@@ -6,11 +6,11 @@
   ],
   "config_flow": true,
   "documentation": "https://github.com/iandresari/smartcharge",
+  "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/iandresari/smartcharge/issues",
+  "quality_scale": "custom",
   "requirements": [
     "aiohttp>=3.8.0"
   ],
-  "version": "1.0.1",
-  "iot_class": "cloud_polling",
-  "quality_scale": "custom"
+  "version": "1.0.1"
 }
