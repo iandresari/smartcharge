@@ -51,4 +51,4 @@ jobs:
         run: black --check custom_components/smartcharge/
 
       - name: Run flake8
-        run: flake8 custom_components/smartcharge/
+        run: flake8 custom_components/smartcharge/ --max-line-length=88
