@@ -28,8 +28,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Hassfest Action
-        uses: home-assistant/actions/hassfest@master
+      - name: Pull hassfest image
+        run: |
+          for i in 1 2 3; do
+            docker pull ghcr.io/home-assistant/hassfest:latest && break
+            echo "Pull failed (attempt $i), retrying in 60s..."
+            sleep 60
+          done
+
+      - name: Run hassfest
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/github/workspace" ghcr.io/home-assistant/hassfest:latest
 
   lint:
     runs-on: ubuntu-latest
