@@ -4,9 +4,5 @@
   "domains": [
     "smartcharge"
   ],
-  "homeassistant": "2024.1.0",
-  "iot_class": "cloud_polling",
-  "version": "1.0.1",
-  "issue_tracker": "https://github.com/iandresari/smartcharge/issues",
-  "documentation": "https://github.com/iandresari/smartcharge"
+  "homeassistant": "2024.1.0"
 }
