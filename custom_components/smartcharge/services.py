@@ -107,49 +107,25 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 await coordinator.async_refresh()
                 _LOGGER.info("Manually refreshed charging station data")
 
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_ADD_CHARGING_POINT,
-        handle_add_charging_point,
-        schema={
-            "type": "object",
-            "properties": {
-                CONF_STATION_ID: {
-                    "type": "string",
-                    "description": "Station ID",
-                },
-                CONF_STATION_NAME: {
-                    "type": "string",
-                    "description": "Station display name",
-                },
-            },
-            "required": [
-                CONF_STATION_ID,
-                CONF_STATION_NAME,
-            ],
-        },
-    )
+    if not hass.services.has_service(DOMAIN, SERVICE_ADD_CHARGING_POINT):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_ADD_CHARGING_POINT,
+            handle_add_charging_point,
+        )
 
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_REMOVE_CHARGING_POINT,
-        handle_remove_charging_point,
-        schema={
-            "type": "object",
-            "properties": {
-                CONF_STATION_ID: {
-                    "type": "string",
-                    "description": "Station ID",
-                },
-            },
-            "required": [CONF_STATION_ID],
-        },
-    )
+    if not hass.services.has_service(DOMAIN, SERVICE_REMOVE_CHARGING_POINT):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_REMOVE_CHARGING_POINT,
+            handle_remove_charging_point,
+        )
 
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_REFRESH_DATA,
-        handle_refresh_data,
-    )
+    if not hass.services.has_service(DOMAIN, SERVICE_REFRESH_DATA):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_REFRESH_DATA,
+            handle_refresh_data,
+        )
 
     _LOGGER.debug("EnBW Charging services registered")

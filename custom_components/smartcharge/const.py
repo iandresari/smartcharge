@@ -20,11 +20,9 @@ CONF_CHARGING_STATIONS: Final = "charging_stations"
 CONF_STATION_ID: Final = "station_id"
 CONF_STATION_NAME: Final = "station_name"
 CONF_UPDATE_INTERVAL: Final = "update_interval"
-CONF_TOKEN: Final = "token"
 
 # Defaults
 DEFAULT_UPDATE_INTERVAL: Final = 300  # 5 minutes
-DEFAULT_SCAN_INTERVAL: Final = 60  # 1 minute for token refresh check
 
 # Status mapping
 CHARGE_POINT_STATUS = {

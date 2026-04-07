@@ -29,6 +29,7 @@ from .const import (
     CONF_STATION_ID,
     CONF_STATION_NAME,
     DOMAIN,
+    STATUS_ICONS,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -103,7 +104,14 @@ class ChargePointStatusSensor(CoordinatorEntity, SensorEntity):
 
         self._attr_unique_id = f"{station_id}_{evse_id}_status"
         self._attr_name = f"{station_name} - {evse_name} Status"
-        self._attr_icon = "mdi:ev-station"
+
+    @property
+    def icon(self) -> str:
+        """Return icon based on current status."""
+        status = self.native_value
+        if isinstance(status, str):
+            return STATUS_ICONS.get(status, "mdi:ev-station")
+        return "mdi:ev-station"
 
     @property
     def native_value(self) -> StateType:
