@@ -1,0 +1,12 @@
+{
+  "name": "SmartCharge - EV Charging Station Monitor",
+  "content_in_root": false,
+  "domains": ["smartcharge"],
+  "homeassistant": "2024.1.0",
+  "iot_class": "cloud_polling",
+  "requirements": ["aiohttp>=3.8.0"],
+  "version": "1.0.1",
+  "issue_tracker": "https://github.com/iandresari/smartcharge/issues",
+  "documentation": "https://github.com/iandresari/smartcharge",
+  "quality_scale": "custom"
+}
