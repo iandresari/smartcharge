@@ -186,20 +186,14 @@ class StationOccupancySensor(CoordinatorEntity, SensorEntity):
         if not charge_points:
             return 0
 
-        occupied = sum(
-            1 for cp in charge_points if cp.get("status") == "Occupied"
-        )
+        occupied = sum(1 for cp in charge_points if cp.get("status") == "Occupied")
         return round((occupied / len(charge_points)) * 100, 1)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes with occupancy history."""
-        weekday_occupancy = self.coordinator.get_occupancy_by_weekday(
-            self.station_id
-        )
-        hourly_occupancy = self.coordinator.get_occupancy_by_hour(
-            self.station_id
-        )
+        weekday_occupancy = self.coordinator.get_occupancy_by_weekday(self.station_id)
+        hourly_occupancy = self.coordinator.get_occupancy_by_hour(self.station_id)
 
         return {
             ATTR_OCCUPANCY_WEEKDAY: weekday_occupancy,

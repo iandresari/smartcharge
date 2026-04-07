@@ -40,10 +40,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 )
 
                 # Check if already exists
-                if any(
-                    s.get(CONF_STATION_ID) == station_id
-                    for s in current_stations
-                ):
+                if any(s.get(CONF_STATION_ID) == station_id for s in current_stations):
                     _LOGGER.warning("Station %s already exists", station_id)
                     return
 
@@ -64,9 +61,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 )
 
                 await coordinator.async_refresh()
-                _LOGGER.info(
-                    "Added charging station %s (%s)", station_id, station_name
-                )
+                _LOGGER.info("Added charging station %s (%s)", station_id, station_name)
                 return
 
     async def handle_remove_charging_point(call: ServiceCall) -> None:
@@ -86,9 +81,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
                 # Remove station
                 updated_stations = [
-                    s
-                    for s in current_stations
-                    if s.get(CONF_STATION_ID) != station_id
+                    s for s in current_stations if s.get(CONF_STATION_ID) != station_id
                 ]
 
                 if len(updated_stations) == len(current_stations):

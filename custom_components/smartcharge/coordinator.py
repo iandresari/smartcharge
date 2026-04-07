@@ -83,13 +83,9 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
             }
 
         except Exception as err:
-            raise UpdateFailed(
-                f"Error communicating with EnBW API: {err}"
-            ) from err
+            raise UpdateFailed(f"Error communicating with EnBW API: {err}") from err
 
-    async def _fetch_station_data(
-        self, station_id: str
-    ) -> dict[str, Any] | None:
+    async def _fetch_station_data(self, station_id: str) -> dict[str, Any] | None:
         """Fetch data for a single charging station."""
         url = f"{API_BASE_URL}/chargestations/{station_id}"
 
@@ -140,9 +136,7 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
 
         # Remove old entries
         history[:] = [
-            entry
-            for entry in history
-            if entry.get("timestamp", now) > cutoff_time
+            entry for entry in history if entry.get("timestamp", now) > cutoff_time
         ]
 
         # Add new entry

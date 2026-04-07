@@ -99,9 +99,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 try:
                     # Fetch and validate station
-                    self.station_data = await self._fetch_station_details(
-                        station_id
-                    )
+                    self.station_data = await self._fetch_station_details(station_id)
                     return await self.async_step_select_charge_points()
 
                 except ConnectionError as err:
@@ -118,9 +116,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="enter_station_id",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_STATION_ID): vol.All(
-                        str, vol.Length(min=1)
-                    ),
+                    vol.Required(CONF_STATION_ID): vol.All(str, vol.Length(min=1)),
                 }
             ),
             errors=errors,
@@ -181,9 +177,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return vol.Schema(
             {
-                vol.Required("charge_points"): cv.multi_select(
-                    charge_point_options
-                ),
+                vol.Required("charge_points"): cv.multi_select(charge_point_options),
             }
         )
 
@@ -204,17 +198,12 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data={
                     CONF_CHARGING_STATIONS: [
                         {
-                            CONF_STATION_ID: self.station_data.get(
-                                "station_id"
-                            ),
+                            CONF_STATION_ID: self.station_data.get("station_id"),
                             CONF_STATION_NAME: self.station_data.get("name"),
                             "charge_points": [
                                 cp
-                                for cp in self.station_data.get(
-                                    "charge_points", []
-                                )
-                                if cp.get("evse_id")
-                                in self.selected_charge_points
+                                for cp in self.station_data.get("charge_points", [])
+                                if cp.get("evse_id") in self.selected_charge_points
                             ],
                         }
                     ],
@@ -250,9 +239,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         url = f"{API_BASE_URL}/chargestations/{station_id}"
 
         try:
-            async with session.get(
-                url, headers=API_HEADERS, timeout=10
-            ) as response:
+            async with session.get(url, headers=API_HEADERS, timeout=10) as response:
                 if response.status != 200:
                     raise ConnectionError(
                         f"Station not found (HTTP {response.status}). "
@@ -269,9 +256,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     charge_points.append(
                         {
                             "evse_id": cp.get("evseId"),
-                            "name": cp.get("evse", {}).get(
-                                "name", cp.get("evseId")
-                            ),
+                            "name": cp.get("evse", {}).get("name", cp.get("evseId")),
                             "connector_type": cp.get("connectorType"),
                             "power": cp.get("powerKw"),
                             "status": cp.get("status"),
@@ -287,9 +272,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
 
         except asyncio.TimeoutError as err:
-            raise ConnectionError(
-                "Request timed out. Please try again."
-            ) from err
+            raise ConnectionError("Request timed out. Please try again.") from err
         except Exception as err:
             _LOGGER.error("Error fetching station details: %s", err)
             raise
@@ -355,16 +338,11 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
                 current_stations = self.config_entry.data.get(
                     CONF_CHARGING_STATIONS, []
                 )
-                if any(
-                    s.get(CONF_STATION_ID) == station_id
-                    for s in current_stations
-                ):
+                if any(s.get(CONF_STATION_ID) == station_id for s in current_stations):
                     errors["base"] = "station_exists"
                 else:
                     try:
-                        station_data = await self._fetch_station_details(
-                            station_id
-                        )
+                        station_data = await self._fetch_station_details(station_id)
 
                         current_stations.append(
                             {
@@ -402,13 +380,9 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
         session = async_get_clientsession(self.hass)
         url = f"{API_BASE_URL}/chargestations/{station_id}"
 
-        async with session.get(
-            url, headers=API_HEADERS, timeout=10
-        ) as response:
+        async with session.get(url, headers=API_HEADERS, timeout=10) as response:
             if response.status != 200:
-                raise ConnectionError(
-                    f"Station not found (HTTP {response.status})"
-                )
+                raise ConnectionError(f"Station not found (HTTP {response.status})")
             data = await response.json()
             if not data.get("chargePoints"):
                 raise ValueError("No charge points found for station")
@@ -418,9 +392,7 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
                 charge_points.append(
                     {
                         "evse_id": cp.get("evseId"),
-                        "name": cp.get("evse", {}).get(
-                            "name", cp.get("evseId")
-                        ),
+                        "name": cp.get("evse", {}).get("name", cp.get("evseId")),
                         "connector_type": cp.get("connectorType"),
                         "power": cp.get("powerKw"),
                     }

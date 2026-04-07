@@ -6,9 +6,7 @@ DOMAIN: Final = "smartcharge"
 VERSION: Final = "1.0.1"
 
 # API Configuration
-API_BASE_URL: Final = (
-    "https://enbw-emp.azure-api.net/emobility-public-api/api/v1"
-)
+API_BASE_URL: Final = "https://enbw-emp.azure-api.net/emobility-public-api/api/v1"
 API_SUBSCRIPTION_KEY: Final = "d4954e8b2e444fc89a89a463788c0a72"
 API_HEADERS: Final = {
     "User-Agent": "Home Assistant / EnBW Charging Integration",

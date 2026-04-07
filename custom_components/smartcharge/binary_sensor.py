@@ -80,9 +80,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class ChargePointAvailabilityBinarySensor(
-    CoordinatorEntity, BinarySensorEntity
-):
+class ChargePointAvailabilityBinarySensor(CoordinatorEntity, BinarySensorEntity):
     """Binary sensor for charge point availability."""
 
     _attr_has_entity_name = True
