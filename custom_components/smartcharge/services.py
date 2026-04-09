@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     CONF_CHARGING_STATIONS,
@@ -95,6 +96,19 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                         CONF_CHARGING_STATIONS: updated_stations,
                     },
                 )
+
+                # Remove orphaned device tracker entities
+                ent_reg = er.async_get(hass)
+                tracker_uid = f"{station_id}_location"
+                entity_id = ent_reg.async_get_entity_id(
+                    "device_tracker", DOMAIN, tracker_uid
+                )
+                if entity_id:
+                    ent_reg.async_remove(entity_id)
+                    _LOGGER.debug(
+                        "Removed device tracker for station %s",
+                        station_id,
+                    )
 
                 await coordinator.async_refresh()
                 _LOGGER.info("Removed charging station %s", station_id)

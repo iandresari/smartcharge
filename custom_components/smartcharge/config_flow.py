@@ -163,6 +163,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_search_map()
 
         options = {}
+        station_details_lines = []
         for s in self._nearby_stations:
             sid = str(s.get("stationId", ""))
             name = s.get("name", "Unknown Station")
@@ -173,6 +174,17 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             label = f"{name} — {location_str}" if location_str else name
             options[sid] = label
 
+            loc = s.get("location", {})
+            lat = loc.get("latitude", "?")
+            lon = loc.get("longitude", "?")
+            detail = f"- **{name}** (ID: {sid})"
+            if location_str:
+                detail += f"\n  {location_str}"
+            detail += f"\n  GPS: {lat}, {lon}"
+            station_details_lines.append(detail)
+
+        station_details = "\n".join(station_details_lines)
+
         return self.async_show_form(
             step_id="select_station",
             data_schema=vol.Schema(
@@ -182,6 +194,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             description_placeholders={
                 "station_count": str(len(self._nearby_stations)),
+                "station_details": station_details,
             },
         )
 

@@ -17,7 +17,7 @@
       },
       "select_station": {
         "title": "Select Charging Station",
-        "description": "Found {station_count} charging stations in the selected area.\n\nSelect the station you want to monitor:",
+        "description": "Found {station_count} charging stations in the selected area:\n\n{station_details}\n\nSelect the station you want to monitor:",
         "data": {
           "station": "Charging Station"
         }
