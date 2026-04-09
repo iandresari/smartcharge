@@ -76,8 +76,7 @@ class ChargingStationTracker(CoordinatorEntity, TrackerEntity):
         """Return latitude of the station."""
         data = self._station_data
         if data:
-            location = data.get("location", {})
-            return location.get("latitude")
+            return data.get("lat")
         return None
 
     @property
@@ -85,8 +84,7 @@ class ChargingStationTracker(CoordinatorEntity, TrackerEntity):
         """Return longitude of the station."""
         data = self._station_data
         if data:
-            location = data.get("location", {})
-            return location.get("longitude")
+            return data.get("lon")
         return None
 
     @property
@@ -99,20 +97,18 @@ class ChargingStationTracker(CoordinatorEntity, TrackerEntity):
         data = self._station_data
         if data:
             # Address
-            address = data.get("address", {})
-            if address:
-                street = address.get("street", "")
-                city = address.get("city", "")
-                attrs["address"] = ", ".join(filter(None, [street, city]))
+            short_address = data.get("shortAddress", "")
+            if short_address:
+                attrs["address"] = short_address
 
             # Charge point summary
             charge_points = data.get("chargePoints", [])
             total = len(charge_points)
             available = sum(
-                1 for cp in charge_points if cp.get("status") == "Available"
+                1 for cp in charge_points if cp.get("status") == "AVAILABLE"
             )
             attrs["charge_points_total"] = total
             attrs["charge_points_available"] = available
-            attrs["station_name"] = data.get("name", self.station_name)
+            attrs["station_name"] = data.get("stationSummary", self.station_name)
 
         return attrs

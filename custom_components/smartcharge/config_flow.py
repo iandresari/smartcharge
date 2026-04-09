@@ -166,20 +166,21 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         station_details_lines = []
         for s in self._nearby_stations:
             sid = str(s.get("stationId", ""))
-            name = s.get("name", "Unknown Station")
-            addr = s.get("address", {})
-            street = addr.get("street", "")
-            city = addr.get("city", "")
-            location_str = ", ".join(filter(None, [street, city]))
-            label = f"{name} — {location_str}" if location_str else name
+            if not sid or sid == "None":
+                continue  # Skip grouped results without station ID
+            name = s.get(
+                "stationSummary",
+                s.get("shortAddress", f"Station {sid}"),
+            )
+            short_addr = s.get("shortAddress", "")
+            label = f"{name} — {short_addr}" if short_addr else name
             options[sid] = label
 
-            loc = s.get("location", {})
-            lat = loc.get("latitude", "?")
-            lon = loc.get("longitude", "?")
+            lat = s.get("lat", "?")
+            lon = s.get("lon", "?")
             detail = f"- **{name}** (ID: {sid})"
-            if location_str:
-                detail += f"\n  {location_str}"
+            if short_addr:
+                detail += f"\n  {short_addr}"
             detail += f"\n  GPS: {lat}, {lon}"
             station_details_lines.append(detail)
 
@@ -451,22 +452,27 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 charge_points = []
                 for cp in data.get("chargePoints", []):
+                    connectors = cp.get("connectors", [])
+                    connector = connectors[0] if connectors else {}
                     charge_points.append(
                         {
                             "evse_id": cp.get("evseId"),
-                            "name": cp.get("evse", {}).get("name", cp.get("evseId")),
-                            "connector_type": cp.get("connectorType"),
-                            "power": cp.get("powerKw"),
+                            "name": cp.get("evseId"),
+                            "connector_type": connector.get("plugTypeName", "Unknown"),
+                            "power": connector.get("maxPowerInKw"),
                             "status": cp.get("status"),
-                            "location": cp.get("location", {}),
                         }
                     )
 
+                station_name = data.get(
+                    "stationSummary",
+                    data.get("shortAddress", f"Station {station_id}"),
+                )
+
                 return {
                     "station_id": station_id,
-                    "name": data.get("name", f"Station {station_id}"),
+                    "name": station_name,
                     "charge_points": charge_points,
-                    "location": data.get("location", {}),
                 }
 
         except asyncio.TimeoutError as err:

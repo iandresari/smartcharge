@@ -31,13 +31,13 @@ CONF_MANUAL_API_KEY: Final = "manual_api_key"
 DEFAULT_UPDATE_INTERVAL: Final = 300  # 5 minutes
 DEFAULT_AUTO_API_KEY: Final = True
 
-# Status mapping
+# Status mapping (API returns uppercase values)
 CHARGE_POINT_STATUS = {
-    "Available": "available",
-    "Occupied": "occupied",
-    "Faulted": "faulted",
-    "Unavailable": "unavailable",
-    "Reserved": "reserved",
+    "AVAILABLE": "available",
+    "OCCUPIED": "occupied",
+    "FAULTED": "faulted",
+    "UNAVAILABLE": "unavailable",
+    "RESERVED": "reserved",
 }
 
 # Icon mapping based on status

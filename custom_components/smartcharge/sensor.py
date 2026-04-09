@@ -61,7 +61,7 @@ async def async_setup_entry(
                         station_id,
                         station_name,
                         evse_id,
-                        cp.get("evse", {}).get("name", evse_id),
+                        evse_id,
                     )
                 )
 
@@ -114,18 +114,21 @@ class ChargePointStatusSensor(CoordinatorEntity, SensorEntity):
         if not self.coordinator.data:
             return {}
 
-        charge_points = self.coordinator.data.get("chargePoints", [])
+        data = self.coordinator.data
+        charge_points = data.get("chargePoints", [])
         for cp in charge_points:
             if cp.get("evseId") == self.evse_id:
-                location = cp.get("location", {})
+                # Power and connector from nested connectors list
+                connectors = cp.get("connectors", [])
+                connector = connectors[0] if connectors else {}
                 return {
                     ATTR_EVSE_ID: self.evse_id,
                     ATTR_STATUS: cp.get("status") or STATE_UNKNOWN,
-                    ATTR_LATITUDE: location.get("latitude"),
-                    ATTR_LONGITUDE: location.get("longitude"),
-                    ATTR_ADDRESS: location.get("address"),
-                    "power": cp.get("powerKw"),
-                    "connector_type": cp.get("connectorType"),
+                    ATTR_LATITUDE: data.get("lat"),
+                    ATTR_LONGITUDE: data.get("lon"),
+                    ATTR_ADDRESS: data.get("shortAddress"),
+                    "power": connector.get("maxPowerInKw"),
+                    "connector_type": connector.get("plugTypeName"),
                 }
 
         return {}
@@ -163,7 +166,7 @@ class StationOccupancySensor(CoordinatorEntity, SensorEntity):
         if not charge_points:
             return 0.0
 
-        occupied = sum(1 for cp in charge_points if cp.get("status") == "Occupied")
+        occupied = sum(1 for cp in charge_points if cp.get("status") == "OCCUPIED")
         return round((occupied / len(charge_points)) * 100, 1)
 
     @property

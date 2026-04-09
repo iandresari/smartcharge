@@ -268,12 +268,12 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
 
             # Hourly bucket
             self._hourly_stats[hour_key]["total"] += 1
-            if status == "Occupied":
+            if status == "OCCUPIED":
                 self._hourly_stats[hour_key]["occupied"] += 1
 
             # Weekday bucket
             self._weekday_stats[weekday_key]["total"] += 1
-            if status == "Occupied":
+            if status == "OCCUPIED":
                 self._weekday_stats[weekday_key]["occupied"] += 1
 
         await self._save_statistics()
