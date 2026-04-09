@@ -73,3 +73,4 @@ SERVICE_REFRESH_DATA: Final = "refresh_data"
 # Platform names
 PLATFORM_SENSOR: Final = "sensor"
 PLATFORM_BINARY_SENSOR: Final = "binary_sensor"
+PLATFORM_DEVICE_TRACKER: Final = "device_tracker"
