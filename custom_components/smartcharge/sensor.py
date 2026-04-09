@@ -85,7 +85,6 @@ class ChargePointStatusSensor(CoordinatorEntity, SensorEntity):
     """Sensor for individual charge point status."""
 
     _attr_has_entity_name = True
-    _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(
         self,
