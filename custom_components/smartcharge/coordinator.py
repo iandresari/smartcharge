@@ -11,6 +11,7 @@ from typing import Any
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -23,7 +24,6 @@ from .const import (
     API_HEADERS,
     API_MAP_URL,
     CONF_AUTO_API_KEY,
-    CONF_CHARGING_STATIONS,
     CONF_MANUAL_API_KEY,
     CONF_STATION_ID,
     DEFAULT_AUTO_API_KEY,
@@ -32,6 +32,8 @@ from .const import (
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
+
+STORAGE_VERSION = 1
 
 # Module-level cache shared across all coordinator instances
 _cached_api_key: str | None = None
@@ -68,7 +70,7 @@ async def fetch_api_key(session: aiohttp.ClientSession) -> str:
             return key
 
         _LOGGER.warning(
-            "Could not extract API key from EnBW map page, using cached/fallback key"
+            "Could not extract API key from EnBW map page," " using cached/fallback key"
         )
         return _cached_api_key or API_FALLBACK_SUBSCRIPTION_KEY
 
@@ -80,6 +82,16 @@ async def fetch_api_key(session: aiohttp.ClientSession) -> str:
 def get_api_headers(api_key: str) -> dict[str, str]:
     """Build API headers with the given subscription key."""
     return {**API_HEADERS, "Ocp-Apim-Subscription-Key": api_key}
+
+
+def _empty_hourly_stats() -> dict[str, dict[str, int]]:
+    """Return zeroed hourly statistics buckets (0-23)."""
+    return {str(h): {"total": 0, "occupied": 0} for h in range(24)}
+
+
+def _empty_weekday_stats() -> dict[str, dict[str, int]]:
+    """Return zeroed weekday statistics buckets (0-6)."""
+    return {str(d): {"total": 0, "occupied": 0} for d in range(7)}
 
 
 class EnBWChargingCoordinator(DataUpdateCoordinator):
@@ -100,8 +112,39 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
         )
         self.session = session
         self.entry = entry
-        self.occupancy_history: dict[str, list[dict[str, Any]]] = {}
         self._api_key: str | None = _cached_api_key
+
+        # Persistent statistics storage
+        station_id = entry.data.get(CONF_STATION_ID, "unknown")
+        self._store: Store = Store(
+            hass,
+            STORAGE_VERSION,
+            f"{DOMAIN}.statistics.{station_id}",
+        )
+        self._hourly_stats: dict[str, dict[str, int]] = _empty_hourly_stats()
+        self._weekday_stats: dict[str, dict[str, int]] = _empty_weekday_stats()
+        self._stats_loaded = False
+
+    async def _load_statistics(self) -> None:
+        """Load accumulated statistics from persistent storage."""
+        if self._stats_loaded:
+            return
+
+        stored = await self._store.async_load()
+        if stored:
+            self._hourly_stats = stored.get("hourly", _empty_hourly_stats())
+            self._weekday_stats = stored.get("weekday", _empty_weekday_stats())
+            _LOGGER.debug("Loaded persistent occupancy statistics")
+        self._stats_loaded = True
+
+    async def _save_statistics(self) -> None:
+        """Persist accumulated statistics to disk."""
+        await self._store.async_save(
+            {
+                "hourly": self._hourly_stats,
+                "weekday": self._weekday_stats,
+            }
+        )
 
     @property
     def _auto_api_key_enabled(self) -> bool:
@@ -120,7 +163,7 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
             if manual_key:
                 return manual_key
             _LOGGER.warning(
-                "Auto API key is disabled but no manual key set, using fallback"
+                "Auto API key is disabled but no manual key set," " using fallback"
             )
             return API_FALLBACK_SUBSCRIPTION_KEY
         if not self._api_key:
@@ -130,36 +173,27 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from EnBW API."""
         try:
-            charging_stations = self.entry.data.get(CONF_CHARGING_STATIONS, [])
+            await self._load_statistics()
 
-            if not charging_stations:
-                _LOGGER.debug("No charging stations configured")
-                return {"chargePoints": {}}
+            station_id = self.entry.data.get(CONF_STATION_ID)
 
-            chargePoints = {}
+            if not station_id:
+                _LOGGER.debug("No station ID configured")
+                return {}
 
-            for station in charging_stations:
-                station_id = station.get(CONF_STATION_ID)
-                if not station_id:
-                    continue
+            try:
+                data = await self._fetch_station_data(station_id)
+                if data:
+                    await self._record_occupancy(data)
+                    return data
+            except Exception as err:
+                _LOGGER.error(
+                    "Error fetching data for station %s: %s",
+                    station_id,
+                    err,
+                )
 
-                try:
-                    data = await self._fetch_station_data(station_id)
-                    if data:
-                        chargePoints[station_id] = data
-                        await self._update_occupancy_history(station_id, data)
-                except Exception as err:
-                    _LOGGER.error(
-                        "Error fetching data for station %s: %s",
-                        station_id,
-                        err,
-                    )
-
-            return {
-                "chargePoints": chargePoints,
-                "lastUpdate": dt_util.now(),
-                "occupancyHistory": self.occupancy_history,
-            }
+            return self.data or {}
 
         except Exception as err:
             raise UpdateFailed(f"Error communicating with EnBW API: {err}") from err
@@ -191,12 +225,13 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
                         if retry_response.status == 200:
                             data = await retry_response.json()
                             _LOGGER.debug(
-                                "Fetched station data for %s (after key refresh)",
+                                "Fetched station data for %s" " (after key refresh)",
                                 station_id,
                             )
                             return data
                         _LOGGER.error(
-                            "Still failing after key refresh for station %s: HTTP %s",
+                            "Still failing after key refresh"
+                            " for station %s: HTTP %s",
                             station_id,
                             retry_response.status,
                         )
@@ -216,97 +251,52 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
             _LOGGER.error("Timeout fetching data for station %s", station_id)
             return None
 
-    async def _update_occupancy_history(
-        self, station_id: str, station_data: dict[str, Any]
-    ) -> None:
-        """Update occupancy history for a station."""
-        if station_id not in self.occupancy_history:
-            self.occupancy_history[station_id] = []
-
+    async def _record_occupancy(self, station_data: dict[str, Any]) -> None:
+        """Record occupancy sample into persistent histogram buckets."""
         now = dt_util.now()
+        hour_key = str(now.hour)
+        weekday_key = str(now.weekday())
+
         charge_points = station_data.get("chargePoints", [])
+        if not charge_points:
+            return
 
-        occupancy_per_point = {}
         for cp in charge_points:
-            evse_id = cp.get("evseId")
             status = cp.get("status")
-            if evse_id:
-                occupancy_per_point[evse_id] = {
-                    "status": status,
-                    "timestamp": now,
-                }
+            if not status:
+                continue
 
-        # Keep only last 24 hours of data per point
-        cutoff_time = now - timedelta(hours=24)
-        history = self.occupancy_history[station_id]
+            # Hourly bucket
+            self._hourly_stats[hour_key]["total"] += 1
+            if status == "Occupied":
+                self._hourly_stats[hour_key]["occupied"] += 1
 
-        # Remove old entries
-        history[:] = [
-            entry for entry in history if entry.get("timestamp", now) > cutoff_time
-        ]
+            # Weekday bucket
+            self._weekday_stats[weekday_key]["total"] += 1
+            if status == "Occupied":
+                self._weekday_stats[weekday_key]["occupied"] += 1
 
-        # Add new entry
-        history.append(
-            {
-                "timestamp": now,
-                "occupancy": occupancy_per_point,
-                "hour": now.hour,
-                "weekday": now.weekday(),
-            }
-        )
+        await self._save_statistics()
 
-    def get_occupancy_by_weekday(self, station_id: str) -> dict[str, float]:
-        """Get average occupancy by weekday."""
-        history = self.occupancy_history.get(station_id, [])
-        weekday_stats = {str(i): {"total": 0, "occupied": 0} for i in range(7)}
-
-        for entry in history:
-            weekday = entry.get("weekday", -1)
-            if weekday >= 0:
-                occupancy = entry.get("occupancy", {})
-                for point_occupancy in occupancy.values():
-                    weekday_stats[str(weekday)]["total"] += 1
-                    if point_occupancy.get("status") == "Occupied":
-                        weekday_stats[str(weekday)]["occupied"] += 1
-
-        result = {}
+    def get_occupancy_by_weekday(self) -> dict[str, float]:
+        """Get accumulated average occupancy % by weekday."""
         weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        for day_num, stats in weekday_stats.items():
-            total = stats["total"]
-            occupied = stats["occupied"]
-            percentage = (occupied / total * 100) if total > 0 else 0
-            result[weekday_names[int(day_num)]] = round(percentage, 1)
-
-        return result
-
-    def get_occupancy_by_hour(self, station_id: str) -> dict[str, float]:
-        """Get average occupancy by hour of day."""
-        history = self.occupancy_history.get(station_id, [])
-        hour_stats = {str(i): {"total": 0, "occupied": 0} for i in range(24)}
-
-        for entry in history:
-            hour = entry.get("hour", -1)
-            if hour >= 0:
-                occupancy = entry.get("occupancy", {})
-                for point_occupancy in occupancy.values():
-                    hour_stats[str(hour)]["total"] += 1
-                    if point_occupancy.get("status") == "Occupied":
-                        hour_stats[str(hour)]["occupied"] += 1
-
         result = {}
-        for hour_num, stats in hour_stats.items():
+        for day_num in range(7):
+            stats = self._weekday_stats.get(str(day_num), {"total": 0, "occupied": 0})
             total = stats["total"]
             occupied = stats["occupied"]
-            percentage = (occupied / total * 100) if total > 0 else 0
-            result[f"{int(hour_num):02d}:00"] = round(percentage, 1)
-
+            pct = (occupied / total * 100) if total > 0 else 0.0
+            result[weekday_names[day_num]] = round(pct, 1)
         return result
 
-    def get_station_location(self, station_id: str, point_data: dict) -> dict:
-        """Extract location data from station point."""
-        location = point_data.get("location", {})
-        return {
-            "latitude": location.get("latitude", 0),
-            "longitude": location.get("longitude", 0),
-            "address": location.get("address", "Unknown"),
-        }
+    def get_occupancy_by_hour(self) -> dict[str, float]:
+        """Get accumulated average occupancy % by hour of day."""
+        result = {}
+        for hour in range(24):
+            stats = self._hourly_stats.get(str(hour), {"total": 0, "occupied": 0})
+            total = stats["total"]
+            occupied = stats["occupied"]
+            pct = (occupied / total * 100) if total > 0 else 0.0
+            result[f"{hour:02d}:00"] = round(pct, 1)
+        return result

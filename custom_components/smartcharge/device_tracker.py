@@ -16,7 +16,6 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import (
-    CONF_CHARGING_STATIONS,
     CONF_STATION_ID,
     CONF_STATION_NAME,
     DOMAIN,
@@ -33,19 +32,13 @@ async def async_setup_entry(
     """Set up device tracker entities for charging stations."""
     coordinator: DataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    entities = []
-    charging_stations = entry.data.get(CONF_CHARGING_STATIONS, [])
+    station_id = entry.data.get(CONF_STATION_ID)
+    station_name = entry.data.get(CONF_STATION_NAME)
 
-    for station in charging_stations:
-        station_id = station.get(CONF_STATION_ID)
-        station_name = station.get(CONF_STATION_NAME)
-
-        if not station_id:
-            continue
-
-        entities.append(ChargingStationTracker(coordinator, station_id, station_name))
-
-    async_add_entities(entities)
+    if station_id:
+        async_add_entities(
+            [ChargingStationTracker(coordinator, station_id, station_name)]
+        )
 
 
 class ChargingStationTracker(CoordinatorEntity, TrackerEntity):
@@ -71,7 +64,7 @@ class ChargingStationTracker(CoordinatorEntity, TrackerEntity):
     @property
     def _station_data(self) -> dict[str, Any] | None:
         """Return current station data from coordinator."""
-        return self.coordinator.data.get("chargePoints", {}).get(self.station_id)
+        return self.coordinator.data
 
     @property
     def source_type(self) -> SourceType:

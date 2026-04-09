@@ -20,9 +20,9 @@ API_HEADERS: Final = {
 }
 
 # Configuration
-CONF_CHARGING_STATIONS: Final = "charging_stations"
 CONF_STATION_ID: Final = "station_id"
 CONF_STATION_NAME: Final = "station_name"
+CONF_CHARGE_POINTS: Final = "charge_points"
 CONF_UPDATE_INTERVAL: Final = "update_interval"
 CONF_AUTO_API_KEY: Final = "auto_api_key"
 CONF_MANUAL_API_KEY: Final = "manual_api_key"
@@ -66,11 +66,8 @@ ENTITY_CATEGORY_OCCUPANCY: Final = "occupancy"
 ENTITY_CATEGORY_INFO: Final = "diagnostic"
 
 # Service names
-SERVICE_ADD_CHARGING_POINT: Final = "add_charging_point"
-SERVICE_REMOVE_CHARGING_POINT: Final = "remove_charging_point"
 SERVICE_REFRESH_DATA: Final = "refresh_data"
 
 # Platform names
 PLATFORM_SENSOR: Final = "sensor"
-PLATFORM_BINARY_SENSOR: Final = "binary_sensor"
 PLATFORM_DEVICE_TRACKER: Final = "device_tracker"

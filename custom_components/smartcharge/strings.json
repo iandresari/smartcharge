@@ -48,13 +48,6 @@
           "auto_api_key": "Automatic API key renewal",
           "manual_api_key": "Manual API key (only used when auto-renewal is off)"
         }
-      },
-      "add_station": {
-        "title": "Add Charging Station",
-        "description": "Add a new EnBW charging station by entering its ID",
-        "data": {
-          "station_id": "Station ID (e.g., 986728)"
-        }
       }
     },
     "error": {
@@ -63,7 +56,6 @@
       "missing_station_id": "Station ID is required.",
       "no_charge_points_selected": "Please select at least one charge point.",
       "no_station_data": "Failed to load station data.",
-      "station_exists": "This station is already configured.",
       "missing_fields": "Please provide both Station ID and Station Name.",
       "no_stations_found": "No charging stations found in this area. Try increasing the radius or moving the pin.",
       "no_location": "Please select a location on the map.",
@@ -72,7 +64,6 @@
     "abort": {
       "reconfigure_successful": "Configuration updated successfully.",
       "reconfigure_failed": "Failed to reconfigure.",
-      "station_added": "Charging station added successfully.",
       "no_station_data": "No station data available."
     }
   },
@@ -86,13 +77,6 @@
           "auto_api_key": "Automatic API key renewal",
           "manual_api_key": "Manual API key (only used when auto-renewal is off)"
         }
-      },
-      "add_station": {
-        "title": "Add Charging Station",
-        "description": "Add a new EnBW charging station",
-        "data": {
-          "station_id": "Station ID (e.g., 986728)"
-        }
       }
     }
   },
@@ -103,14 +87,6 @@
       },
       "occupancy": {
         "name": "Occupancy"
-      }
-    },
-    "binary_sensor": {
-      "available": {
-        "name": "Available"
-      },
-      "occupied": {
-        "name": "Occupied"
       }
     }
   }

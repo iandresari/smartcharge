@@ -17,7 +17,7 @@ from homeassistant.helpers.selector import LocationSelector, LocationSelectorCon
 from .const import (
     API_BASE_URL,
     CONF_AUTO_API_KEY,
-    CONF_CHARGING_STATIONS,
+    CONF_CHARGE_POINTS,
     CONF_MANUAL_API_KEY,
     CONF_STATION_ID,
     CONF_STATION_NAME,
@@ -353,20 +353,16 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             manual_api_key = user_input.get(CONF_MANUAL_API_KEY, "").strip()
 
             return self.async_create_entry(
-                title=(f"EnBW - " f"{self.station_data.get(
-                        'name', 'Charging Station'
-                    )}"),
+                title=(
+                    f"EnBW - " f"{self.station_data.get('name', 'Charging Station')}"
+                ),
                 data={
-                    CONF_CHARGING_STATIONS: [
-                        {
-                            CONF_STATION_ID: self.station_data.get("station_id"),
-                            CONF_STATION_NAME: self.station_data.get("name"),
-                            "charge_points": [
-                                cp
-                                for cp in self.station_data.get("charge_points", [])
-                                if cp.get("evse_id") in self.selected_charge_points
-                            ],
-                        }
+                    CONF_STATION_ID: self.station_data.get("station_id"),
+                    CONF_STATION_NAME: self.station_data.get("name"),
+                    CONF_CHARGE_POINTS: [
+                        cp
+                        for cp in self.station_data.get("charge_points", [])
+                        if cp.get("evse_id") in self.selected_charge_points
                     ],
                     CONF_UPDATE_INTERVAL: update_interval,
                 },
@@ -516,104 +512,6 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
                 }
             ),
         )
-
-    async def async_step_add_station(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Add a new charging station through options."""
-        errors = {}
-
-        if user_input is not None:
-            station_id = user_input.get(CONF_STATION_ID, "").strip()
-
-            if not station_id:
-                errors["base"] = "missing_station_id"
-            else:
-                # Check for duplicates
-                current_stations = self.config_entry.data.get(
-                    CONF_CHARGING_STATIONS, []
-                )
-                if any(s.get(CONF_STATION_ID) == station_id for s in current_stations):
-                    errors["base"] = "station_exists"
-                else:
-                    try:
-                        station_data = await self._fetch_station_details(station_id)
-
-                        current_stations.append(
-                            {
-                                CONF_STATION_ID: station_id,
-                                CONF_STATION_NAME: station_data["name"],
-                                "charge_points": station_data["charge_points"],
-                            }
-                        )
-
-                        self.hass.config_entries.async_update_entry(
-                            self.config_entry,
-                            data={
-                                **self.config_entry.data,
-                                CONF_CHARGING_STATIONS: current_stations,
-                            },
-                        )
-                        return self.async_abort(reason="station_added")
-
-                    except Exception as err:
-                        _LOGGER.error("Error adding station: %s", err)
-                        errors["base"] = "connection_error"
-
-        return self.async_show_form(
-            step_id="add_station",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_STATION_ID): str,
-                }
-            ),
-            errors=errors,
-        )
-
-    async def _fetch_station_details(self, station_id: str) -> dict[str, Any]:
-        """Fetch station data from EnBW API."""
-        session = async_get_clientsession(self.hass)
-        url = f"{API_BASE_URL}/chargestations/{station_id}"
-        api_key = await fetch_api_key(session)
-        headers = get_api_headers(api_key)
-
-        async with session.get(
-            url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
-        ) as response:
-            if response.status in (401, 403):
-                api_key = await fetch_api_key(session)
-                headers = get_api_headers(api_key)
-                async with session.get(
-                    url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
-                ) as retry:
-                    if retry.status != 200:
-                        raise ConnectionError(
-                            f"Station not found (HTTP {retry.status})"
-                        )
-                    data = await retry.json()
-            elif response.status != 200:
-                raise ConnectionError(f"Station not found (HTTP {response.status})")
-            else:
-                data = await response.json()
-            if not data.get("chargePoints"):
-                raise ValueError("No charge points found for station")
-
-            charge_points = []
-            for cp in data.get("chargePoints", []):
-                charge_points.append(
-                    {
-                        "evse_id": cp.get("evseId"),
-                        "name": cp.get("evse", {}).get("name", cp.get("evseId")),
-                        "connector_type": cp.get("connectorType"),
-                        "power": cp.get("powerKw"),
-                    }
-                )
-
-            return {
-                "station_id": station_id,
-                "name": data.get("name", f"Station {station_id}"),
-                "charge_points": charge_points,
-            }
 
 
 # Link options flow with config flow

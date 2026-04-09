@@ -6,11 +6,11 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 
 ## Features
 
-- **Easy Configuration**: Add/remove charging stations via the UI
-- **Real-time Status**: Get live status updates for all charging points
-- **Occupancy Tracking**: View occupancy patterns by day of week and hour
-- **Location Data**: GPS coordinates and addresses for all stations
-- **Dynamic Icons**: Icons that change based on charging point status
+- **Easy Configuration**: Search nearby stations on a map or enter a station ID directly — one config entry per station
+- **Real-time Status**: One sensor per charge point showing live status (available, occupied, faulted, etc.)
+- **Occupancy Tracking**: Persistent occupancy histograms by hour-of-day and weekday, accumulating over time and surviving restarts
+- **Map Integration**: Device tracker entity places each station on the HA map with GPS coordinates
+- **Location Data**: GPS coordinates and address as attributes on each charge point sensor
 
 ## Installation
 
@@ -38,6 +38,8 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 6. Select which charge points to monitor
 7. Configure the update interval (60–3600 seconds, default 300)
 
+To monitor multiple stations, add the integration once per station.
+
 ## Getting Station IDs (Manual Fallback)
 
 If you prefer to enter a station ID directly, you can find it using your browser's developer tools:
@@ -57,19 +59,20 @@ If you prefer to enter a station ID directly, you can find it using your browser
 
 ## Entities
 
+Each config entry (one per station) creates:
+
 ### Sensors
 
-- **Status**: Current status of each charge point (available, occupied, faulted, unavailable, reserved)
-- **Occupancy**: Overall occupancy percentage for the station
+- **Charge Point Status** (one per charge point): Current status — `available`, `occupied`, `faulted`, `unavailable`, or `reserved`
+- **Station Occupancy**: Overall occupancy percentage for the station
 
-### Binary Sensors
+### Device Tracker
 
-- **Available**: True if charge point is available for use
-- **Occupied**: True if charge point is currently in use
+- **Station Location**: Places the station on the HA map with GPS coordinates
 
 ### Attributes
 
-Status sensors include:
+Charge point status sensors include:
 - `evse_id`: Unique EVSE identifier
 - `status`: Raw status from API
 - `latitude` / `longitude`: GPS coordinates
@@ -77,31 +80,15 @@ Status sensors include:
 - `power`: Charging power in kW
 - `connector_type`: Connector type
 
-Occupancy sensors include:
-- `occupancy_weekday`: Occupancy percentage by day of week
-- `occupancy_hourly`: Occupancy percentage by hour
+Occupancy sensor includes:
+- `occupancy_weekday`: Average occupancy % by day of week (accumulated over time)
+- `occupancy_hourly`: Average occupancy % by hour of day (accumulated over time)
 
-Binary sensors include:
-- `evse_id`, `status`, `latitude`, `longitude`, `address`
+Device tracker includes:
+- `address`: Street address
+- `charge_points_total` / `charge_points_available`: Summary counts
 
 ## Service Calls
-
-### Add Charging Point
-
-```yaml
-service: smartcharge.add_charging_point
-data:
-  station_id: "986728"
-  station_name: "New Station"
-```
-
-### Remove Charging Point
-
-```yaml
-service: smartcharge.remove_charging_point
-data:
-  station_id: "986728"
-```
 
 ### Refresh Data
 
@@ -109,30 +96,22 @@ data:
 service: smartcharge.refresh_data
 ```
 
-## Status Icons
-
-- 🟢 **Available**: `mdi:ev-station` - Ready to charge
-- 🔴 **Occupied**: `mdi:ev-station-unavailable` - Currently in use
-- ⚠️ **Faulted**: `mdi:alert-circle` - Technical issue
-- ⭕ **Unavailable**: `mdi:cancel` - Not available
-- 🔒 **Reserved**: `mdi:lock` - Reserved by another user
-
 ## Automations Example
 
-### Notify when a specific station becomes available
+### Notify when a charge point becomes available
 
 ```yaml
 automation:
   - alias: "Notify when charging station available"
     trigger:
       platform: state
-      entity_id: binary_sensor.my_charger_1_available
-      to: "on"
+      entity_id: sensor.my_station_charger_1
+      to: "available"
     action:
       - service: notify.mobile_app_phone
         data:
           title: "Charging Station Available"
-          message: "My Charger Point 1 is now available!"
+          message: "Charger 1 is now available!"
 ```
 
 ## Troubleshooting

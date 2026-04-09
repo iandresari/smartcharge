@@ -25,11 +25,9 @@ from .const import (
     ATTR_OCCUPANCY_WEEKDAY,
     ATTR_STATUS,
     CHARGE_POINT_STATUS,
-    CONF_CHARGING_STATIONS,
     CONF_STATION_ID,
     CONF_STATION_NAME,
     DOMAIN,
-    STATUS_ICONS,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -45,38 +43,29 @@ async def async_setup_entry(
 
     entities = []
 
-    charging_stations = entry.data.get(CONF_CHARGING_STATIONS, [])
+    station_id = entry.data.get(CONF_STATION_ID)
+    station_name = entry.data.get(CONF_STATION_NAME)
 
-    for station in charging_stations:
-        station_id = station.get(CONF_STATION_ID)
-        station_name = station.get(CONF_STATION_NAME)
+    if not station_id:
+        return
 
-        if not station_id:
-            continue
+    if coordinator.data:
+        charge_points = coordinator.data.get("chargePoints", [])
 
-        # Get station data to add charge point sensors
-        station_data = coordinator.data.get("chargePoints", {}).get(station_id)
-
-        if station_data:
-            charge_points = station_data.get("chargePoints", [])
-
-            for charge_point in charge_points:
-                evse_id = charge_point.get("evseId")
-                if evse_id:
-                    entities.append(
-                        ChargePointStatusSensor(
-                            coordinator,
-                            station_id,
-                            station_name,
-                            evse_id,
-                            charge_point.get("evse", {}).get("name", evse_id),
-                        )
+        for cp in charge_points:
+            evse_id = cp.get("evseId")
+            if evse_id:
+                entities.append(
+                    ChargePointStatusSensor(
+                        coordinator,
+                        station_id,
+                        station_name,
+                        evse_id,
+                        cp.get("evse", {}).get("name", evse_id),
                     )
+                )
 
-            # Add occupancy sensors for the station
-            entities.append(
-                StationOccupancySensor(coordinator, station_id, station_name)
-            )
+        entities.append(StationOccupancySensor(coordinator, station_id, station_name))
 
     async_add_entities(entities)
 
@@ -85,6 +74,7 @@ class ChargePointStatusSensor(CoordinatorEntity, SensorEntity):
     """Sensor for individual charge point status."""
 
     _attr_has_entity_name = True
+    _attr_icon = "mdi:ev-station"
 
     def __init__(
         self,
@@ -102,27 +92,15 @@ class ChargePointStatusSensor(CoordinatorEntity, SensorEntity):
         self.evse_name = evse_name
 
         self._attr_unique_id = f"{station_id}_{evse_id}_status"
-        self._attr_name = f"{station_name} - {evse_name} Status"
-
-    @property
-    def icon(self) -> str:
-        """Return icon based on current status."""
-        status = self.native_value
-        if isinstance(status, str):
-            return STATUS_ICONS.get(status, "mdi:ev-station")
-        return "mdi:ev-station"
+        self._attr_name = f"{station_name} {evse_name}"
 
     @property
     def native_value(self) -> StateType:
         """Return the state of the sensor."""
-        station_data = self.coordinator.data.get("chargePoints", {}).get(
-            self.station_id
-        )
-
-        if not station_data:
+        if not self.coordinator.data:
             return STATE_UNKNOWN
 
-        charge_points = station_data.get("chargePoints", [])
+        charge_points = self.coordinator.data.get("chargePoints", [])
         for cp in charge_points:
             if cp.get("evseId") == self.evse_id:
                 status = cp.get("status")
@@ -133,20 +111,16 @@ class ChargePointStatusSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes."""
-        station_data = self.coordinator.data.get("chargePoints", {}).get(
-            self.station_id
-        )
-
-        if not station_data:
+        if not self.coordinator.data:
             return {}
 
-        charge_points = station_data.get("chargePoints", [])
+        charge_points = self.coordinator.data.get("chargePoints", [])
         for cp in charge_points:
             if cp.get("evseId") == self.evse_id:
                 location = cp.get("location", {})
                 return {
                     ATTR_EVSE_ID: self.evse_id,
-                    ATTR_STATUS: cp.get("status"),
+                    ATTR_STATUS: cp.get("status") or STATE_UNKNOWN,
                     ATTR_LATITUDE: location.get("latitude"),
                     ATTR_LONGITUDE: location.get("longitude"),
                     ATTR_ADDRESS: location.get("address"),
@@ -158,11 +132,12 @@ class ChargePointStatusSensor(CoordinatorEntity, SensorEntity):
 
 
 class StationOccupancySensor(CoordinatorEntity, SensorEntity):
-    """Sensor for station occupancy history."""
+    """Sensor for station occupancy percentage."""
 
     _attr_has_entity_name = True
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:percent"
 
     def __init__(
         self,
@@ -177,21 +152,16 @@ class StationOccupancySensor(CoordinatorEntity, SensorEntity):
 
         self._attr_unique_id = f"{station_id}_occupancy"
         self._attr_name = f"{station_name} Occupancy"
-        self._attr_icon = "mdi:percent"
 
     @property
     def native_value(self) -> StateType:
         """Return current occupancy percentage."""
-        station_data = self.coordinator.data.get("chargePoints", {}).get(
-            self.station_id
-        )
+        if not self.coordinator.data:
+            return 0.0
 
-        if not station_data:
-            return 0
-
-        charge_points = station_data.get("chargePoints", [])
+        charge_points = self.coordinator.data.get("chargePoints", [])
         if not charge_points:
-            return 0
+            return 0.0
 
         occupied = sum(1 for cp in charge_points if cp.get("status") == "Occupied")
         return round((occupied / len(charge_points)) * 100, 1)
@@ -199,8 +169,8 @@ class StationOccupancySensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes with occupancy history."""
-        weekday_occupancy = self.coordinator.get_occupancy_by_weekday(self.station_id)
-        hourly_occupancy = self.coordinator.get_occupancy_by_hour(self.station_id)
+        weekday_occupancy = self.coordinator.get_occupancy_by_weekday()
+        hourly_occupancy = self.coordinator.get_occupancy_by_hour()
 
         return {
             ATTR_OCCUPANCY_WEEKDAY: weekday_occupancy,
