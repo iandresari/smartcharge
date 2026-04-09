@@ -11,7 +11,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     DOMAIN,
-    PLATFORM_DEVICE_TRACKER,
     PLATFORM_SENSOR,
 )
 from .coordinator import EnBWChargingCoordinator
@@ -19,7 +18,7 @@ from .services import async_setup_services
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
-PLATFORMS: Final = [PLATFORM_SENSOR, PLATFORM_DEVICE_TRACKER]
+PLATFORMS: Final = [PLATFORM_SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
