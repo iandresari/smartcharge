@@ -8,7 +8,7 @@ add_charging_point:
   fields:
     station_id:
       name: Station ID
-      description: The EnBW charging station ID (e.g., 171042)
+      description: The EnBW charging station ID (e.g., 986728)
       required: true
       selector:
         text:

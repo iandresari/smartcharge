@@ -6,22 +6,27 @@ import asyncio
 import logging
 from typing import Any
 
+import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.selector import LocationSelector, LocationSelectorConfig
 
 from .const import (
     API_BASE_URL,
-    API_HEADERS,
+    CONF_AUTO_API_KEY,
     CONF_CHARGING_STATIONS,
+    CONF_MANUAL_API_KEY,
     CONF_STATION_ID,
     CONF_STATION_NAME,
     CONF_UPDATE_INTERVAL,
+    DEFAULT_AUTO_API_KEY,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
 )
+from .coordinator import fetch_api_key, get_api_headers
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -36,24 +41,28 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         super().__init__()
         self.station_data: dict[str, Any] | None = None
         self.selected_charge_points: list[str] = []
+        self._nearby_stations: list[dict[str, Any]] = []
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle user step - choose to browse map or enter ID."""
+        """Handle user step - choose to search map, browse, or enter ID."""
         if user_input is not None:
-            if user_input.get("action") == "browse":
+            action = user_input.get("action")
+            if action == "search":
+                return await self.async_step_search_map()
+            if action == "browse":
                 return await self.async_step_browse_map()
-            else:
-                return await self.async_step_enter_station_id()
+            return await self.async_step_enter_station_id()
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required("action", default="browse"): vol.In(
+                    vol.Required("action", default="search"): vol.In(
                         {
-                            "browse": "Browse Map & Enter Station ID",
+                            "search": "Search Nearby Stations (Recommended)",
+                            "browse": "Browse EnBW Map & Enter Station ID",
                             "manual": "Enter Station ID Directly",
                         }
                     ),
@@ -84,6 +93,143 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             },
         )
+
+    async def async_step_search_map(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Show a map for the user to pick a search location."""
+        errors = {}
+
+        if user_input is not None:
+            loc = user_input.get("location", {})
+            lat = loc.get("latitude")
+            lon = loc.get("longitude")
+            radius_m = loc.get("radius", 5000)
+
+            if lat is None or lon is None:
+                errors["base"] = "no_location"
+            else:
+                try:
+                    radius_deg = radius_m / 111_000
+                    self._nearby_stations = await self._search_stations_area(
+                        lat - radius_deg,
+                        lat + radius_deg,
+                        lon - radius_deg,
+                        lon + radius_deg,
+                    )
+                    if self._nearby_stations:
+                        return await self.async_step_select_station()
+                    errors["base"] = "no_stations_found"
+                except ConnectionError:
+                    errors["base"] = "connection_error"
+                except Exception as err:
+                    _LOGGER.error("Error searching stations: %s", err)
+                    errors["base"] = "unknown_error"
+
+        default_location = {
+            "latitude": self.hass.config.latitude,
+            "longitude": self.hass.config.longitude,
+            "radius": 5000,
+        }
+
+        return self.async_show_form(
+            step_id="search_map",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "location", default=default_location
+                    ): LocationSelector(
+                        LocationSelectorConfig(radius=True, icon="mdi:ev-station")
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_select_station(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Let user pick a station from the search results."""
+        if user_input is not None:
+            station_id = user_input.get("station")
+            try:
+                self.station_data = await self._fetch_station_details(station_id)
+                return await self.async_step_select_charge_points()
+            except ConnectionError as err:
+                _LOGGER.error("Connection error: %s", err)
+                return await self.async_step_search_map()
+            except ValueError as err:
+                _LOGGER.error("Invalid station: %s", err)
+                return await self.async_step_search_map()
+
+        options = {}
+        for s in self._nearby_stations:
+            sid = str(s.get("stationId", ""))
+            name = s.get("name", "Unknown Station")
+            addr = s.get("address", {})
+            street = addr.get("street", "")
+            city = addr.get("city", "")
+            location_str = ", ".join(filter(None, [street, city]))
+            label = f"{name} — {location_str}" if location_str else name
+            options[sid] = label
+
+        return self.async_show_form(
+            step_id="select_station",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("station"): vol.In(options),
+                }
+            ),
+            description_placeholders={
+                "station_count": str(len(self._nearby_stations)),
+            },
+        )
+
+    async def _search_stations_area(
+        self,
+        from_lat: float,
+        to_lat: float,
+        from_lon: float,
+        to_lon: float,
+    ) -> list[dict[str, Any]]:
+        """Search for charging stations in a geographic area."""
+        session = async_get_clientsession(self.hass)
+        api_key = await fetch_api_key(session)
+        headers = get_api_headers(api_key)
+
+        url = (
+            f"{API_BASE_URL}/chargestations"
+            f"?fromLat={from_lat}&toLat={to_lat}"
+            f"&fromLon={from_lon}&toLon={to_lon}"
+            f"&grouping=false"
+        )
+
+        try:
+            async with session.get(
+                url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)
+            ) as response:
+                if response.status in (401, 403):
+                    api_key = await fetch_api_key(session)
+                    headers = get_api_headers(api_key)
+                    async with session.get(
+                        url,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=15),
+                    ) as retry:
+                        if retry.status != 200:
+                            raise ConnectionError(f"API returned HTTP {retry.status}")
+                        data = await retry.json()
+                elif response.status != 200:
+                    raise ConnectionError(f"API returned HTTP {response.status}")
+                else:
+                    data = await response.json()
+
+            if isinstance(data, list):
+                return data
+            return []
+
+        except asyncio.TimeoutError as err:
+            raise ConnectionError("Search request timed out") from err
 
     async def async_step_enter_station_id(
         self, user_input: dict[str, Any] | None = None
@@ -190,6 +336,8 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_UPDATE_INTERVAL,
                 DEFAULT_UPDATE_INTERVAL,
             )
+            auto_api_key = user_input.get(CONF_AUTO_API_KEY, DEFAULT_AUTO_API_KEY)
+            manual_api_key = user_input.get(CONF_MANUAL_API_KEY, "").strip()
 
             return self.async_create_entry(
                 title=(f"EnBW - " f"{self.station_data.get(
@@ -209,6 +357,10 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ],
                     CONF_UPDATE_INTERVAL: update_interval,
                 },
+                options={
+                    CONF_AUTO_API_KEY: auto_api_key,
+                    CONF_MANUAL_API_KEY: manual_api_key,
+                },
             )
 
         schema = vol.Schema(
@@ -220,6 +372,14 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Coerce(int),
                     vol.Range(min=60, max=3600),
                 ),
+                vol.Optional(
+                    CONF_AUTO_API_KEY,
+                    default=DEFAULT_AUTO_API_KEY,
+                ): bool,
+                vol.Optional(
+                    CONF_MANUAL_API_KEY,
+                    default="",
+                ): str,
             }
         )
 
@@ -237,16 +397,45 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Fetch station data from EnBW API and extract charge points."""
         session = async_get_clientsession(self.hass)
         url = f"{API_BASE_URL}/chargestations/{station_id}"
+        api_key = await fetch_api_key(session)
+        headers = get_api_headers(api_key)
 
         try:
-            async with session.get(url, headers=API_HEADERS, timeout=10) as response:
-                if response.status != 200:
-                    raise ConnectionError(
-                        f"Station not found (HTTP {response.status}). "
+            async with session.get(
+                url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                if response.status in (401, 403):
+                    _LOGGER.info(
+                        "API key rejected (HTTP %s), refreshing", response.status
+                    )
+                    api_key = await fetch_api_key(session)
+                    headers = get_api_headers(api_key)
+                    async with session.get(
+                        url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+                    ) as retry:
+                        if retry.status == 404:
+                            raise ValueError(
+                                f"Station {station_id} not found. "
+                                f"Please verify the station ID on the map."
+                            )
+                        if retry.status != 200:
+                            raise ConnectionError(
+                                f"API returned HTTP {retry.status}. "
+                                f"Please try again in a moment."
+                            )
+                        data = await retry.json()
+                elif response.status == 404:
+                    raise ValueError(
+                        f"Station {station_id} not found. "
                         f"Please verify the station ID on the map."
                     )
-
-                data = await response.json()
+                elif response.status != 200:
+                    raise ConnectionError(
+                        f"API returned HTTP {response.status}. "
+                        f"Please try again in a moment."
+                    )
+                else:
+                    data = await response.json()
 
                 if not data.get("chargePoints"):
                     raise ValueError("Station has no charge points")
@@ -279,21 +468,6 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.error("Error fetching station details: %s", err)
             raise
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle options flow."""
-        config_entry = self.hass.config_entries.async_get_entry(
-            self.context.get("entry_id")
-        )
-        if config_entry is None:
-            return self.async_abort(reason="reconfigure_failed")
-
-        if user_input is not None:
-            return self.async_abort(reason="reconfigure_successful")
-
-        return self.async_show_form(step_id="init")
-
 
 class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
     """Options flow for EnBW Charging."""
@@ -312,6 +486,10 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
         update_interval = self.config_entry.data.get(
             CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
         )
+        auto_api_key = self.config_entry.options.get(
+            CONF_AUTO_API_KEY, DEFAULT_AUTO_API_KEY
+        )
+        manual_api_key = self.config_entry.options.get(CONF_MANUAL_API_KEY, "")
 
         return self.async_show_form(
             step_id="init",
@@ -320,6 +498,8 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
                     vol.Optional(
                         CONF_UPDATE_INTERVAL, default=update_interval
                     ): vol.All(vol.Coerce(int), vol.Range(min=60, max=3600)),
+                    vol.Optional(CONF_AUTO_API_KEY, default=auto_api_key): bool,
+                    vol.Optional(CONF_MANUAL_API_KEY, default=manual_api_key): str,
                 }
             ),
         )
@@ -381,11 +561,27 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
         """Fetch station data from EnBW API."""
         session = async_get_clientsession(self.hass)
         url = f"{API_BASE_URL}/chargestations/{station_id}"
+        api_key = await fetch_api_key(session)
+        headers = get_api_headers(api_key)
 
-        async with session.get(url, headers=API_HEADERS, timeout=10) as response:
-            if response.status != 200:
+        async with session.get(
+            url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+        ) as response:
+            if response.status in (401, 403):
+                api_key = await fetch_api_key(session)
+                headers = get_api_headers(api_key)
+                async with session.get(
+                    url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+                ) as retry:
+                    if retry.status != 200:
+                        raise ConnectionError(
+                            f"Station not found (HTTP {retry.status})"
+                        )
+                    data = await retry.json()
+            elif response.status != 200:
                 raise ConnectionError(f"Station not found (HTTP {response.status})")
-            data = await response.json()
+            else:
+                data = await response.json()
             if not data.get("chargePoints"):
                 raise ValueError("No charge points found for station")
 

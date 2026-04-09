@@ -8,13 +8,27 @@
           "action": "Configuration Method"
         }
       },
+      "search_map": {
+        "title": "Search Nearby Stations",
+        "description": "Drag the pin on the map to the area where your charging station is located. Adjust the radius to cover the search area.\n\nThe map defaults to your Home Assistant home location.",
+        "data": {
+          "location": "Station area"
+        }
+      },
+      "select_station": {
+        "title": "Select Charging Station",
+        "description": "Found {station_count} charging stations in the selected area.\n\nSelect the station you want to monitor:",
+        "data": {
+          "station": "Charging Station"
+        }
+      },
       "browse_map": {
         "title": "Browse EnBW Charging Map",
-        "description": "Open the EnBW charging station map to find your station ID:\n\n[EnBW Charging Map]({map_url})\n\nOnce you find your station on the map, note down the station ID (6-digit number) and proceed to the next step."
+        "description": "Open the EnBW charging station map to find your station ID:\n\n[EnBW Charging Map]({map_url})\n\nTo find the station ID, open your browser's developer tools (F12), go to the Network tab, and click a station on the map. Look for a request to chargestations/XXXXXX \u2014 the number is the station ID."
       },
       "enter_station_id": {
         "title": "Enter Station ID",
-        "description": "Enter the station ID you found on the [EnBW map]({map_url})\n\nExample: 171042 for BEG Abt Tor 5",
+        "description": "Enter the numeric station ID from the EnBW API URL.\n\nTo find it: open the [EnBW map]({map_url}), press F12 \u2192 Network tab, click a station, and look for the number in the chargestations/XXXXXX request URL.\n\nExample: 986728",
         "data": {
           "station_id": "Station ID"
         }
@@ -28,16 +42,18 @@
       },
       "configure_settings": {
         "title": "Configure Settings",
-        "description": "Configure how often to fetch data from the API\n\n{update_interval_description}",
+        "description": "Configure how often to fetch data from the API and API key settings\n\n{update_interval_description}",
         "data": {
-          "update_interval": "Update Interval (seconds)"
+          "update_interval": "Update Interval (seconds)",
+          "auto_api_key": "Automatic API key renewal",
+          "manual_api_key": "Manual API key (only used when auto-renewal is off)"
         }
       },
       "add_station": {
         "title": "Add Charging Station",
         "description": "Add a new EnBW charging station by entering its ID",
         "data": {
-          "station_id": "Station ID (e.g., 171042)"
+          "station_id": "Station ID (e.g., 986728)"
         }
       }
     },
@@ -49,6 +65,8 @@
       "no_station_data": "Failed to load station data.",
       "station_exists": "This station is already configured.",
       "missing_fields": "Please provide both Station ID and Station Name.",
+      "no_stations_found": "No charging stations found in this area. Try increasing the radius or moving the pin.",
+      "no_location": "Please select a location on the map.",
       "unknown_error": "An unexpected error occurred. Please try again."
     },
     "abort": {
@@ -64,14 +82,16 @@
         "title": "EnBW Charging Options",
         "description": "Configure your EnBW charging station settings",
         "data": {
-          "update_interval": "Data Update Interval (seconds)"
+          "update_interval": "Data Update Interval (seconds)",
+          "auto_api_key": "Automatic API key renewal",
+          "manual_api_key": "Manual API key (only used when auto-renewal is off)"
         }
       },
       "add_station": {
         "title": "Add Charging Station",
         "description": "Add a new EnBW charging station",
         "data": {
-          "station_id": "Station ID (e.g., 171042)"
+          "station_id": "Station ID (e.g., 986728)"
         }
       }
     }

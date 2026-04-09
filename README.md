@@ -33,17 +33,27 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 1. Go to Settings → Devices & Services
 2. Click "Add Integration"
 3. Search for "SmartCharge"
-4. Choose to browse the EnBW map or enter a station ID directly
-5. Select which charge points to monitor
-6. Configure the update interval (60–3600 seconds, default 300)
+4. Choose **Search Nearby Stations** (recommended) to find stations on a map, or enter a station ID manually
+5. If searching: drag the map pin to your area, adjust the radius, then pick a station from the results
+6. Select which charge points to monitor
+7. Configure the update interval (60–3600 seconds, default 300)
 
-## Getting Station IDs
+## Getting Station IDs (Manual Fallback)
 
-You can find station IDs by browsing the EnBW charging map during setup, or by visiting:
+If you prefer to enter a station ID directly, you can find it using your browser's developer tools:
 
-https://www.enbw.com/elektromobilitaet/produkte/mobilityplus-app/ladestation-finden/map
+1. Open the [EnBW charging map](https://www.enbw.com/elektromobilitaet/produkte/mobilityplus-app/ladestation-finden/map)
+2. Open your browser's developer tools:
+   - **Chrome**: Press `F12` or `Ctrl+Shift+I`, then go to the **Network** tab
+   - **Firefox**: Press `F12` or `Ctrl+Shift+I`, then go to the **Network** tab
+3. Click on a charging station on the map
+4. In the Network tab, look for a request to the EnBW API, e.g.:
+   ```
+   https://enbw-emp.azure-api.net/emobility-public-api/api/v1/chargestations/134057
+   ```
+5. The number at the end of the URL (e.g. `134057`) is the **station ID**
 
-The station ID is the numeric identifier shown when you select a station on the map.
+> **Tip**: You can also find the API subscription key in the request headers under `Ocp-Apim-Subscription-Key` if you want to set a manual key in the integration options.
 
 ## Entities
 
@@ -81,7 +91,7 @@ Binary sensors include:
 ```yaml
 service: smartcharge.add_charging_point
 data:
-  station_id: "171042"
+  station_id: "986728"
   station_name: "New Station"
 ```
 
@@ -90,7 +100,7 @@ data:
 ```yaml
 service: smartcharge.remove_charging_point
 data:
-  station_id: "171042"
+  station_id: "986728"
 ```
 
 ### Refresh Data
@@ -116,13 +126,13 @@ automation:
   - alias: "Notify when charging station available"
     trigger:
       platform: state
-      entity_id: binary_sensor.beg_t5_1_available
+      entity_id: binary_sensor.my_charger_1_available
       to: "on"
     action:
       - service: notify.mobile_app_phone
         data:
           title: "Charging Station Available"
-          message: "BEG Torhaus 5 Point 1 is now available!"
+          message: "My Charger Point 1 is now available!"
 ```
 
 ## Troubleshooting

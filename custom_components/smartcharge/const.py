@@ -7,10 +7,14 @@ VERSION: Final = "1.0.1"
 
 # API Configuration
 API_BASE_URL: Final = "https://enbw-emp.azure-api.net/emobility-public-api/api/v1"
-API_SUBSCRIPTION_KEY: Final = "d4954e8b2e444fc89a89a463788c0a72"
+API_MAP_URL: Final = (
+    "https://www.enbw.com/elektromobilitaet/produkte/"
+    "mobilityplus-app/ladestation-finden/map"
+)
+API_FALLBACK_SUBSCRIPTION_KEY: Final = "d4954e8b2e444fc89a89a463788c0a72"
 API_HEADERS: Final = {
+    "Accept": "application/json",
     "User-Agent": "Home Assistant / EnBW Charging Integration",
-    "Ocp-Apim-Subscription-Key": API_SUBSCRIPTION_KEY,
     "Referer": "https://www.enbw.com/",
     "Origin": "https://www.enbw.com",
 }
@@ -20,9 +24,12 @@ CONF_CHARGING_STATIONS: Final = "charging_stations"
 CONF_STATION_ID: Final = "station_id"
 CONF_STATION_NAME: Final = "station_name"
 CONF_UPDATE_INTERVAL: Final = "update_interval"
+CONF_AUTO_API_KEY: Final = "auto_api_key"
+CONF_MANUAL_API_KEY: Final = "manual_api_key"
 
 # Defaults
 DEFAULT_UPDATE_INTERVAL: Final = 300  # 5 minutes
+DEFAULT_AUTO_API_KEY: Final = True
 
 # Status mapping
 CHARGE_POINT_STATUS = {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import timedelta
 from typing import Any
 
@@ -18,14 +19,67 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     API_BASE_URL,
+    API_FALLBACK_SUBSCRIPTION_KEY,
     API_HEADERS,
+    API_MAP_URL,
+    CONF_AUTO_API_KEY,
     CONF_CHARGING_STATIONS,
+    CONF_MANUAL_API_KEY,
     CONF_STATION_ID,
+    DEFAULT_AUTO_API_KEY,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
+
+# Module-level cache shared across all coordinator instances
+_cached_api_key: str | None = None
+
+
+async def fetch_api_key(session: aiohttp.ClientSession) -> str:
+    """Fetch the current API subscription key from the EnBW map page."""
+    global _cached_api_key  # noqa: PLW0603
+
+    try:
+        async with session.get(
+            API_MAP_URL,
+            timeout=aiohttp.ClientTimeout(total=15),
+            headers={"User-Agent": "Home Assistant / EnBW Charging Integration"},
+        ) as response:
+            if response.status != 200:
+                _LOGGER.warning(
+                    "Could not fetch EnBW map page (HTTP %s),"
+                    " using cached/fallback key",
+                    response.status,
+                )
+                return _cached_api_key or API_FALLBACK_SUBSCRIPTION_KEY
+
+            html = await response.text()
+
+        match = re.search(
+            r'apimSubscriptionKey\s*[:\"=]+\s*["\']([a-f0-9]{32})["\']', html
+        )
+        if match:
+            key = match.group(1)
+            if key != _cached_api_key:
+                _LOGGER.info("EnBW API subscription key updated")
+            _cached_api_key = key
+            return key
+
+        _LOGGER.warning(
+            "Could not extract API key from EnBW map page, using cached/fallback key"
+        )
+        return _cached_api_key or API_FALLBACK_SUBSCRIPTION_KEY
+
+    except Exception as err:
+        _LOGGER.warning("Error fetching API key: %s, using cached/fallback key", err)
+        return _cached_api_key or API_FALLBACK_SUBSCRIPTION_KEY
+
+
+def get_api_headers(api_key: str) -> dict[str, str]:
+    """Build API headers with the given subscription key."""
+    return {**API_HEADERS, "Ocp-Apim-Subscription-Key": api_key}
 
 
 class EnBWChargingCoordinator(DataUpdateCoordinator):
@@ -47,6 +101,31 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
         self.session = session
         self.entry = entry
         self.occupancy_history: dict[str, list[dict[str, Any]]] = {}
+        self._api_key: str | None = _cached_api_key
+
+    @property
+    def _auto_api_key_enabled(self) -> bool:
+        """Return whether automatic API key renewal is enabled."""
+        return self.entry.options.get(CONF_AUTO_API_KEY, DEFAULT_AUTO_API_KEY)
+
+    @property
+    def _manual_api_key_value(self) -> str:
+        """Return the manually configured API key, if any."""
+        return self.entry.options.get(CONF_MANUAL_API_KEY, "")
+
+    async def _resolve_api_key(self) -> str:
+        """Resolve the API key based on configuration."""
+        if not self._auto_api_key_enabled:
+            manual_key = self._manual_api_key_value
+            if manual_key:
+                return manual_key
+            _LOGGER.warning(
+                "Auto API key is disabled but no manual key set, using fallback"
+            )
+            return API_FALLBACK_SUBSCRIPTION_KEY
+        if not self._api_key:
+            self._api_key = await fetch_api_key(self.session)
+        return self._api_key
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from EnBW API."""
@@ -88,13 +167,40 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
     async def _fetch_station_data(self, station_id: str) -> dict[str, Any] | None:
         """Fetch data for a single charging station."""
         url = f"{API_BASE_URL}/chargestations/{station_id}"
+        api_key = await self._resolve_api_key()
+        headers = get_api_headers(api_key)
 
         try:
             async with self.session.get(
                 url,
-                headers=API_HEADERS,
+                headers=headers,
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as response:
+                if response.status in (401, 403) and self._auto_api_key_enabled:
+                    _LOGGER.info(
+                        "API key rejected (HTTP %s), refreshing key",
+                        response.status,
+                    )
+                    self._api_key = await fetch_api_key(self.session)
+                    headers = get_api_headers(self._api_key)
+                    async with self.session.get(
+                        url,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=10),
+                    ) as retry_response:
+                        if retry_response.status == 200:
+                            data = await retry_response.json()
+                            _LOGGER.debug(
+                                "Fetched station data for %s (after key refresh)",
+                                station_id,
+                            )
+                            return data
+                        _LOGGER.error(
+                            "Still failing after key refresh for station %s: HTTP %s",
+                            station_id,
+                            retry_response.status,
+                        )
+                        return None
                 if response.status == 200:
                     data = await response.json()
                     _LOGGER.debug("Fetched station data for %s", station_id)
