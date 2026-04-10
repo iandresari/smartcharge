@@ -88,6 +88,60 @@ Device tracker includes:
 - `address`: Street address
 - `charge_points_total` / `charge_points_available`: Summary counts
 
+## Dashboard: Occupancy Histograms with Plotly Graph Card
+
+You can visualize the occupancy data as color-coded bar charts using the [Plotly Graph Card](https://github.com/dbuezas/lovelace-plotly-graph-card) (install via HACS → Frontend).
+
+![Occupancy Histogram](docs/occupancy_histogram.png)
+
+```yaml
+type: custom:plotly-graph
+raw_plotly_config: true
+defaults:
+  entity:
+    type: bar
+    showlegend: false
+    marker:
+      colorscale: Portland
+      cmin: 0
+      cmax: 100
+  xaxes:
+    type: category
+    showgrid: true
+  yaxes:
+    range: [0, 100]
+    title: Occupancy %
+    dtick: 25
+    showgrid: true
+entities:
+  - entity: &station sensor.YOUR_STATION_occupancy
+    name: Hourly
+    x: $ex Object.keys(meta.occupancy_hourly || {})
+    "y": $ex Object.values(meta.occupancy_hourly || {})
+    marker:
+      color: $ex Object.values(meta.occupancy_hourly || {})
+  - entity: *station
+    name: Weekly
+    x: $ex Object.keys(meta.occupancy_weekday || {})
+    "y": $ex Object.values(meta.occupancy_weekday || {})
+    xaxis: x2
+    yaxis: y2
+    marker:
+      color: $ex Object.values(meta.occupancy_weekday || {})
+layout:
+  title: Station Occupancy
+  height: 500
+  grid:
+    rows: 2
+    columns: 1
+    subplots: [[xy], [x2y2]]
+    roworder: top to bottom
+  xaxis:
+    dtick: 2
+```
+
+> **Note**: Replace `sensor.YOUR_STATION_occupancy` with your actual occupancy entity ID. The YAML anchor (`&station` / `*station`) ensures the entity is defined only once. The `meta` variable provides direct access to the entity's attributes. Bar colors follow a continuous gradient (Portland colorscale) from low (blue) to high (red) occupancy. Other built-in colorscales: `Jet`, `RdYlGn_r`, `YlOrRd`, `Viridis` — see [Plotly colorscales](https://plotly.com/javascript/colorscales/).
+
 ## Service Calls
 
 ### Refresh Data
