@@ -66,10 +66,6 @@ Each config entry (one per station) creates:
 - **Charge Point Status** (one per charge point): Current status — `available`, `occupied`, `faulted`, `unavailable`, or `reserved`
 - **Station Occupancy**: Overall occupancy percentage for the station
 
-### Device Tracker
-
-- **Station Location**: Places the station on the HA map with GPS coordinates
-
 ### Attributes
 
 Charge point status sensors include:
@@ -83,10 +79,6 @@ Charge point status sensors include:
 Occupancy sensor includes:
 - `occupancy_weekday`: Average occupancy % by day of week (accumulated over time)
 - `occupancy_hourly`: Average occupancy % by hour of day (accumulated over time)
-
-Device tracker includes:
-- `address`: Street address
-- `charge_points_total` / `charge_points_available`: Summary counts
 
 ## Dashboard: Occupancy Histograms with Plotly Graph Card
 
