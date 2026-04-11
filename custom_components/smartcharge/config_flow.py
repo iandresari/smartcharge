@@ -140,9 +140,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(
                         "location", default=default_location
                     ): LocationSelector(
-                        LocationSelectorConfig(
-                            radius=True, icon="mdi:ev-station"
-                        )
+                        LocationSelectorConfig(radius=True, icon="mdi:ev-station")
                     ),
                 }
             ),
@@ -156,9 +154,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             station_id = user_input.get("station")
             try:
-                self.station_data = await self._fetch_station_details(
-                    station_id
-                )
+                self.station_data = await self._fetch_station_details(station_id)
                 return await self.async_step_configure_settings()
             except ConnectionError as err:
                 _LOGGER.error("Connection error: %s", err)
@@ -236,14 +232,10 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         timeout=aiohttp.ClientTimeout(total=15),
                     ) as retry:
                         if retry.status != 200:
-                            raise ConnectionError(
-                                f"API returned HTTP {retry.status}"
-                            )
+                            raise ConnectionError(f"API returned HTTP {retry.status}")
                         data = await retry.json()
                 elif response.status != 200:
-                    raise ConnectionError(
-                        f"API returned HTTP {response.status}"
-                    )
+                    raise ConnectionError(f"API returned HTTP {response.status}")
                 else:
                     data = await response.json()
 
@@ -268,9 +260,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 try:
                     # Fetch and validate station
-                    self.station_data = await self._fetch_station_details(
-                        station_id
-                    )
+                    self.station_data = await self._fetch_station_details(station_id)
                     return await self.async_step_configure_settings()
 
                 except ConnectionError as err:
@@ -287,9 +277,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="enter_station_id",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_STATION_ID): vol.All(
-                        str, vol.Length(min=1)
-                    ),
+                    vol.Required(CONF_STATION_ID): vol.All(str, vol.Length(min=1)),
                 }
             ),
             errors=errors,
@@ -310,8 +298,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Compute default static name: extract code after 'DE*' from first evse_id,
         # fallback to 'EVSE'
         charge_points = (
-            self.station_data.get("charge_points", [])
-            if self.station_data else []
+            self.station_data.get("charge_points", []) if self.station_data else []
         )
         first_evse = (
             charge_points[0]["evse_id"]
@@ -323,29 +310,23 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             parts = first_evse.split("*")
             if len(parts) > 1:
                 code = parts[1]
-        default_static = (
-            f"{code}_station_{self.station_data.get('station_id', '')}"
-        )
+        default_static = f"{code}_station_{self.station_data.get('station_id', '')}"
 
         if user_input is not None:
             update_interval = user_input.get(
                 CONF_UPDATE_INTERVAL,
                 DEFAULT_UPDATE_INTERVAL,
             )
-            auto_api_key = user_input.get(
-                CONF_AUTO_API_KEY, DEFAULT_AUTO_API_KEY
-            )
+            auto_api_key = user_input.get(CONF_AUTO_API_KEY, DEFAULT_AUTO_API_KEY)
             manual_api_key = user_input.get(CONF_MANUAL_API_KEY, "").strip()
             static_friendly_name = (
-                user_input.get(CONF_STATIC_FRIENDLY_NAME, default_static)
-                .strip()
+                user_input.get(CONF_STATIC_FRIENDLY_NAME, default_static).strip()
                 or default_static
             )
 
             return self.async_create_entry(
                 title=(
-                    f"EnBW - "
-                    f"{self.station_data.get('name', 'Charging Station')}"
+                    f"EnBW - " f"{self.station_data.get('name', 'Charging Station')}"
                 ),
                 data={
                     CONF_STATION_ID: self.station_data.get("station_id"),
@@ -457,9 +438,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         {
                             "evse_id": cp.get("evseId"),
                             "name": cp.get("evseId"),
-                            "connector_type": connector.get(
-                                "plugTypeName", "Unknown"
-                            ),
+                            "connector_type": connector.get("plugTypeName", "Unknown"),
                             "power": connector.get("maxPowerInKw"),
                             "status": cp.get("status"),
                         }
@@ -477,9 +456,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
 
         except asyncio.TimeoutError as err:
-            raise ConnectionError(
-                "Request timed out. Please try again."
-            ) from err
+            raise ConnectionError("Request timed out. Please try again.") from err
         except (ConnectionError, ValueError):
             raise
         except Exception as err:
@@ -516,12 +493,8 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
                     vol.Optional(
                         CONF_UPDATE_INTERVAL, default=update_interval
                     ): vol.All(vol.Coerce(int), vol.Range(min=60, max=3600)),
-                    vol.Optional(
-                        CONF_AUTO_API_KEY, default=auto_api_key
-                    ): bool,
-                    vol.Optional(
-                        CONF_MANUAL_API_KEY, default=manual_api_key
-                    ): str,
+                    vol.Optional(CONF_AUTO_API_KEY, default=auto_api_key): bool,
+                    vol.Optional(CONF_MANUAL_API_KEY, default=manual_api_key): str,
                 }
             ),
         )

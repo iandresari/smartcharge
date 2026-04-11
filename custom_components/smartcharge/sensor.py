@@ -47,14 +47,16 @@ async def async_setup_entry(
 
     # Get static friendly name from config entry if present
     static_friendly_name = entry.data.get("static_friendly_name")
-    async_add_entities([
-        StationAvailabilitySensor(
-            coordinator,
-            station_id,
-            station_name,
-            static_friendly_name,
-        )
-    ])
+    async_add_entities(
+        [
+            StationAvailabilitySensor(
+                coordinator,
+                station_id,
+                station_name,
+                static_friendly_name,
+            )
+        ]
+    )
 
 
 class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
@@ -91,9 +93,7 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
             return 0, 0
         charge_points = self.coordinator.data.get("chargePoints", [])
         total = len(charge_points)
-        available = sum(
-            1 for cp in charge_points if cp.get("status") == "AVAILABLE"
-        )
+        available = sum(1 for cp in charge_points if cp.get("status") == "AVAILABLE")
         return available, total
 
     @property
@@ -120,11 +120,7 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
         available, total = self._get_counts()
         if total == 0:
             return "unknown"
-        return (
-            "available"
-            if available > 0
-            else "occupied"
-        )
+        return "available" if available > 0 else "occupied"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -164,11 +160,7 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
             attrs[evse_id] = detail
 
         # Occupancy histograms (previously on the separate occupancy sensor)
-        attrs[ATTR_OCCUPANCY_WEEKDAY] = (
-            self.coordinator.get_occupancy_by_weekday()
-        )
-        attrs[ATTR_OCCUPANCY_HOURLY] = (
-            self.coordinator.get_occupancy_by_hour()
-        )
+        attrs[ATTR_OCCUPANCY_WEEKDAY] = self.coordinator.get_occupancy_by_weekday()
+        attrs[ATTR_OCCUPANCY_HOURLY] = self.coordinator.get_occupancy_by_hour()
 
         return attrs

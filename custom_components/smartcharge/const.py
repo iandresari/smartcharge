@@ -5,9 +5,7 @@ from typing import Final
 DOMAIN: Final = "smartcharge"
 
 # API Configuration
-API_BASE_URL: Final = (
-    "https://enbw-emp.azure-api.net/emobility-public-api/api/v1"
-)
+API_BASE_URL: Final = "https://enbw-emp.azure-api.net/emobility-public-api/api/v1"
 API_MAP_URL: Final = (
     "https://www.enbw.com/elektromobilitaet/produkte/"
     "mobilityplus-app/ladestation-finden/map"
