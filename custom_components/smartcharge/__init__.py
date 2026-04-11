@@ -9,10 +9,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
 
 from .const import (
     DOMAIN,
     PLATFORM_SENSOR,
+    CONF_STATION_ID,
 )
 from .coordinator import EnBWChargingCoordinator
 from .services import async_setup_services
@@ -64,6 +66,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Clean up persistent storage when a config entry is removed."""
+    station_id = entry.data.get(CONF_STATION_ID, "unknown")
+    store = Store(hass, 1, f"{DOMAIN}.statistics.{station_id}")
+    await store.async_remove()
+    _LOGGER.debug("Removed persistent statistics for station %s", station_id)
 
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:

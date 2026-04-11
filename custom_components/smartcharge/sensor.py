@@ -59,8 +59,6 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
     and the hourly / weekday occupancy histograms.
     """
 
-    _attr_has_entity_name = True
-
     def __init__(
         self,
         coordinator: DataUpdateCoordinator,
@@ -73,6 +71,7 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
         self.station_name = station_name or f"Station_{station_id}"
 
         self._attr_unique_id = f"{station_id}_availability"
+        self.entity_id = f"sensor.sc_station_{station_id}"
 
     def _get_counts(self) -> tuple[int, int]:
         """Return (available, total) charge point counts."""
