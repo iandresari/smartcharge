@@ -7,10 +7,11 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 ## Features
 
 - **Easy Configuration**: Search nearby stations on a map or enter a station ID directly — one config entry per station
-- **Real-time Status**: One sensor per charge point showing live status (available, occupied, faulted, etc.)
+- **Single Entity per Station**: One sensor per station showing `available` or `occupied`, with a dynamic name like `2 / 5 - StationName`
+- **Charge Point Details**: Every charge point's status, power, and connector type exposed as entity attributes
 - **Occupancy Tracking**: Persistent occupancy histograms by hour-of-day and weekday, accumulating over time and surviving restarts
-- **Map Integration**: Device tracker entity places each station on the HA map with GPS coordinates
-- **Location Data**: GPS coordinates and address as attributes on each charge point sensor
+- **Map Integration**: GPS coordinates as attributes so the sensor appears on the HA map
+- **Location Data**: GPS coordinates and address as attributes on each station sensor
 
 ## Installation
 
@@ -35,8 +36,7 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 3. Search for "SmartCharge"
 4. Choose **Search Nearby Stations** (recommended) to find stations on a map, or enter a station ID manually
 5. If searching: drag the map pin to your area, adjust the radius, then pick a station from the results
-6. Select which charge points to monitor
-7. Configure the update interval (60–3600 seconds, default 300)
+6. Configure the update interval (60–3600 seconds, default 300)
 
 To monitor multiple stations, add the integration once per station.
 
@@ -59,24 +59,22 @@ If you prefer to enter a station ID directly, you can find it using your browser
 
 ## Entities
 
-Each config entry (one per station) creates:
+Each config entry (one per station) creates a single sensor:
 
-### Sensors
+### Station Availability Sensor
 
-- **Charge Point Status** (one per charge point): Current status — `available`, `occupied`, `faulted`, `unavailable`, or `reserved`
-- **Station Occupancy**: Overall occupancy percentage for the station
+- **State**: `available` (at least one charge point is free) or `occupied` (all charge points in use)
+- **Dynamic Name**: Updates to show availability, e.g. `2 / 5 - Hauptstraße 10, Stuttgart`
+- **Icon**: Switches between `mdi:ev-station` and `mdi:ev-station-unavailable`
 
 ### Attributes
 
-Charge point status sensors include:
-- `evse_id`: Unique EVSE identifier
-- `status`: Raw status from API
-- `latitude` / `longitude`: GPS coordinates
+- `total_charge_points`: Total number of charge points at the station
+- `available_count`: Number of currently available charge points
+- `occupied_count`: Number of currently occupied charge points
+- `latitude` / `longitude`: GPS coordinates (enables map display)
 - `address`: Physical address
-- `power`: Charging power in kW
-- `connector_type`: Connector type
-
-Occupancy sensor includes:
+- **Per charge point** (keyed by EVSE ID): Status, power in kW, and connector type, e.g. `available | 50 kW | CCS`
 - `occupancy_weekday`: Average occupancy % by day of week (accumulated over time)
 - `occupancy_hourly`: Average occupancy % by hour of day (accumulated over time)
 
@@ -106,7 +104,7 @@ defaults:
     dtick: 25
     showgrid: true
 entities:
-  - entity: &station sensor.YOUR_STATION_occupancy
+  - entity: &station sensor.YOUR_STATION_availability
     name: Hourly
     x: $ex Object.keys(meta.occupancy_hourly || {})
     "y": $ex Object.values(meta.occupancy_hourly || {})
@@ -132,7 +130,7 @@ layout:
     dtick: 2
 ```
 
-> **Note**: Replace `sensor.YOUR_STATION_occupancy` with your actual occupancy entity ID. The YAML anchor (`&station` / `*station`) ensures the entity is defined only once. The `meta` variable provides direct access to the entity's attributes. Bar colors follow a continuous gradient (Portland colorscale) from low (blue) to high (red) occupancy. Other built-in colorscales: `Jet`, `RdYlGn_r`, `YlOrRd`, `Viridis` — see [Plotly colorscales](https://plotly.com/javascript/colorscales/).
+> **Note**: Replace `sensor.YOUR_STATION_availability` with your actual station entity ID. The YAML anchor (`&station` / `*station`) ensures the entity is defined only once. The `meta` variable provides direct access to the entity's attributes. Bar colors follow a continuous gradient (Portland colorscale) from low (blue) to high (red) occupancy. Other built-in colorscales: `Jet`, `RdYlGn_r`, `YlOrRd`, `Viridis` — see [Plotly colorscales](https://plotly.com/javascript/colorscales/).
 
 ## Service Calls
 
@@ -151,13 +149,15 @@ automation:
   - alias: "Notify when charging station available"
     trigger:
       platform: state
-      entity_id: sensor.my_station_charger_1
+      entity_id: sensor.my_station_availability
       to: "available"
     action:
       - service: notify.mobile_app_phone
         data:
           title: "Charging Station Available"
-          message: "Charger 1 is now available!"
+          message: >
+            {{ state_attr('sensor.my_station_availability', 'available_count') }}
+            charge point(s) now free!
 ```
 
 ## Troubleshooting

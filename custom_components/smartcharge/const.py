@@ -3,7 +3,6 @@
 from typing import Final
 
 DOMAIN: Final = "smartcharge"
-VERSION: Final = "1.0.1"
 
 # API Configuration
 API_BASE_URL: Final = "https://enbw-emp.azure-api.net/emobility-public-api/api/v1"
@@ -22,7 +21,6 @@ API_HEADERS: Final = {
 # Configuration
 CONF_STATION_ID: Final = "station_id"
 CONF_STATION_NAME: Final = "station_name"
-CONF_CHARGE_POINTS: Final = "charge_points"
 CONF_UPDATE_INTERVAL: Final = "update_interval"
 CONF_AUTO_API_KEY: Final = "auto_api_key"
 CONF_MANUAL_API_KEY: Final = "manual_api_key"
@@ -55,15 +53,6 @@ ATTR_LONGITUDE: Final = "longitude"
 ATTR_ADDRESS: Final = "address"
 ATTR_OCCUPANCY_WEEKDAY: Final = "occupancy_weekday"
 ATTR_OCCUPANCY_HOURLY: Final = "occupancy_hourly"
-ATTR_STATUS: Final = "status"
-ATTR_LAST_UPDATE: Final = "last_update"
-ATTR_EVSE_ID: Final = "evse_id"
-ATTR_POWER_KW: Final = "power_kw"
-ATTR_CONNECTOR_TYPE: Final = "connector_type"
-
-# Entity categories
-ENTITY_CATEGORY_OCCUPANCY: Final = "occupancy"
-ENTITY_CATEGORY_INFO: Final = "diagnostic"
 
 # Service names
 SERVICE_REFRESH_DATA: Final = "refresh_data"

@@ -11,13 +11,11 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import LocationSelector, LocationSelectorConfig
 
 from .const import (
     API_BASE_URL,
     CONF_AUTO_API_KEY,
-    CONF_CHARGE_POINTS,
     CONF_MANUAL_API_KEY,
     CONF_STATION_ID,
     CONF_STATION_NAME,
@@ -40,7 +38,6 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         super().__init__()
         self.station_data: dict[str, Any] | None = None
-        self.selected_charge_points: list[str] = []
         self._nearby_stations: list[dict[str, Any]] = []
 
     async def async_step_user(
@@ -154,7 +151,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             station_id = user_input.get("station")
             try:
                 self.station_data = await self._fetch_station_details(station_id)
-                return await self.async_step_select_charge_points()
+                return await self.async_step_configure_settings()
             except ConnectionError as err:
                 _LOGGER.error("Connection error: %s", err)
                 return await self.async_step_search_map()
@@ -260,7 +257,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 try:
                     # Fetch and validate station
                     self.station_data = await self._fetch_station_details(station_id)
-                    return await self.async_step_select_charge_points()
+                    return await self.async_step_configure_settings()
 
                 except ConnectionError as err:
                     _LOGGER.error("Connection error: %s", err)
@@ -288,59 +285,6 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
-    async def async_step_select_charge_points(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Let user select which charge points to monitor."""
-        if not self.station_data:
-            return self.async_abort(reason="no_station_data")
-
-        if user_input is not None:
-            selected = user_input.get("charge_points", [])
-            if not selected:
-                return self.async_show_form(
-                    step_id="select_charge_points",
-                    data_schema=self._build_charge_points_schema(),
-                    errors={"base": "no_charge_points_selected"},
-                )
-
-            self.selected_charge_points = selected
-            return await self.async_step_configure_settings()
-
-        return self.async_show_form(
-            step_id="select_charge_points",
-            data_schema=self._build_charge_points_schema(),
-            description_placeholders={
-                "station_name": self.station_data.get("name", "Unknown"),
-                "charge_point_count": str(
-                    len(self.station_data.get("charge_points", []))
-                ),
-            },
-        )
-
-    def _build_charge_points_schema(self) -> vol.Schema:
-        """Build schema for selecting charge points."""
-        if not self.station_data:
-            return vol.Schema({})
-
-        charge_points = self.station_data.get("charge_points", [])
-        charge_point_options = {}
-
-        for cp in charge_points:
-            evse_id = cp.get("evse_id")
-            name = cp.get("name", evse_id)
-            connector = cp.get("connector_type", "Unknown")
-            power = cp.get("power", "Unknown")
-
-            display_text = f"{name} ({connector}, {power}kW)"
-            charge_point_options[evse_id] = display_text
-
-        return vol.Schema(
-            {
-                vol.Required("charge_points"): cv.multi_select(charge_point_options),
-            }
-        )
-
     async def async_step_configure_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -360,11 +304,6 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data={
                     CONF_STATION_ID: self.station_data.get("station_id"),
                     CONF_STATION_NAME: self.station_data.get("name"),
-                    CONF_CHARGE_POINTS: [
-                        cp
-                        for cp in self.station_data.get("charge_points", [])
-                        if cp.get("evse_id") in self.selected_charge_points
-                    ],
                     CONF_UPDATE_INTERVAL: update_interval,
                 },
                 options={

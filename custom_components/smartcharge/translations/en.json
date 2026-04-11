@@ -33,13 +33,6 @@
           "station_id": "Station ID"
         }
       },
-      "select_charge_points": {
-        "title": "Select Charge Points",
-        "description": "Station: {station_name}\nFound {charge_point_count} charge points\n\nSelect which charge points you want to monitor:",
-        "data": {
-          "charge_points": "Charge Points"
-        }
-      },
       "configure_settings": {
         "title": "Configure Settings",
         "description": "Configure how often to fetch data from the API and API key settings\n\n{update_interval_description}",
@@ -82,11 +75,8 @@
   },
   "entity": {
     "sensor": {
-      "status": {
-        "name": "Status"
-      },
-      "occupancy": {
-        "name": "Occupancy"
+      "availability": {
+        "name": "Availability"
       }
     }
   }
