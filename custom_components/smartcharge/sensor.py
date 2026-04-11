@@ -45,18 +45,28 @@ async def async_setup_entry(
     if not station_id:
         return
 
-    async_add_entities(
-        [StationAvailabilitySensor(coordinator, station_id, station_name)]
-    )
+    # Get static friendly name from config entry if present
+    static_friendly_name = entry.data.get("static_friendly_name")
+    async_add_entities([
+        StationAvailabilitySensor(
+            coordinator,
+            station_id,
+            station_name,
+            static_friendly_name,
+        )
+    ])
 
 
 class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
-    """Single sensor per station showing availability, charge point details & histogram.
+    """
+    Single sensor per station showing availability,
+    charge point details & histogram.
 
     The state value is the count of available charge points.
-    The friendly name dynamically reflects availability, e.g. "2 / 5 - StationName".
-    Attributes include every charge point's status, GPS, address, connector info,
-    and the hourly / weekday occupancy histograms.
+    The friendly name dynamically reflects availability,
+    e.g. "2 / 5 - StationName".
+    Attributes include every charge point's status, GPS, address,
+    connector info, and the hourly / weekday occupancy histograms.
     """
 
     def __init__(
@@ -64,11 +74,13 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
         coordinator: DataUpdateCoordinator,
         station_id: str,
         station_name: str,
+        static_friendly_name: str = None,
     ) -> None:
         """Initialize sensor."""
         super().__init__(coordinator)
         self.station_id = station_id
         self.station_name = station_name or f"Station_{station_id}"
+        self.static_friendly_name = static_friendly_name or self.station_name
 
         self._attr_unique_id = f"{station_id}_availability"
         self.entity_id = f"sensor.sc_station_{station_id}"
@@ -79,14 +91,20 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
             return 0, 0
         charge_points = self.coordinator.data.get("chargePoints", [])
         total = len(charge_points)
-        available = sum(1 for cp in charge_points if cp.get("status") == "AVAILABLE")
+        available = sum(
+            1 for cp in charge_points if cp.get("status") == "AVAILABLE"
+        )
         return available, total
 
     @property
     def name(self) -> str:
         """Return dynamic name showing availability."""
         available, total = self._get_counts()
-        return f"{available} / {total} - {self.station_name}"
+        if total > 9 or available > 9:
+            available_str = " ".join(str(available))
+        else:
+            available_str = str(available)
+        return f"{available_str} / {total} - {self.static_friendly_name}"
 
     @property
     def icon(self) -> str:
@@ -102,7 +120,11 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
         available, total = self._get_counts()
         if total == 0:
             return "unknown"
-        return "available" if available > 0 else "occupied"
+        return (
+            "available"
+            if available > 0
+            else "occupied"
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -142,7 +164,11 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
             attrs[evse_id] = detail
 
         # Occupancy histograms (previously on the separate occupancy sensor)
-        attrs[ATTR_OCCUPANCY_WEEKDAY] = self.coordinator.get_occupancy_by_weekday()
-        attrs[ATTR_OCCUPANCY_HOURLY] = self.coordinator.get_occupancy_by_hour()
+        attrs[ATTR_OCCUPANCY_WEEKDAY] = (
+            self.coordinator.get_occupancy_by_weekday()
+        )
+        attrs[ATTR_OCCUPANCY_HOURLY] = (
+            self.coordinator.get_occupancy_by_hour()
+        )
 
         return attrs

@@ -47,7 +47,9 @@ async def fetch_api_key(session: aiohttp.ClientSession) -> str:
         async with session.get(
             API_MAP_URL,
             timeout=aiohttp.ClientTimeout(total=15),
-            headers={"User-Agent": "Home Assistant / EnBW Charging Integration"},
+            headers={
+                "User-Agent": "Home Assistant / EnBW Charging Integration"
+            },
         ) as response:
             if response.status != 200:
                 _LOGGER.warning(
@@ -70,12 +72,17 @@ async def fetch_api_key(session: aiohttp.ClientSession) -> str:
             return key
 
         _LOGGER.warning(
-            "Could not extract API key from EnBW map page," " using cached/fallback key"
+            (
+                "Could not extract API key from EnBW map page,"
+                " using cached/fallback key"
+            )
         )
         return _cached_api_key or API_FALLBACK_SUBSCRIPTION_KEY
 
     except Exception as err:
-        _LOGGER.warning("Error fetching API key: %s, using cached/fallback key", err)
+        _LOGGER.warning(
+            "Error fetching API key: %s, using cached/fallback key", err
+        )
         return _cached_api_key or API_FALLBACK_SUBSCRIPTION_KEY
 
 
@@ -163,7 +170,10 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
             if manual_key:
                 return manual_key
             _LOGGER.warning(
-                "Auto API key is disabled but no manual key set," " using fallback"
+                (
+                    "Auto API key is disabled but no manual key set,"
+                    " using fallback"
+                )
             )
             return API_FALLBACK_SUBSCRIPTION_KEY
         if not self._api_key:
@@ -196,9 +206,13 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
             return self.data or {}
 
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with EnBW API: {err}") from err
+            raise UpdateFailed(
+                f"Error communicating with EnBW API: {err}"
+            ) from err
 
-    async def _fetch_station_data(self, station_id: str) -> dict[str, Any] | None:
+    async def _fetch_station_data(
+        self, station_id: str
+    ) -> dict[str, Any] | None:
         """Fetch data for a single charging station."""
         url = f"{API_BASE_URL}/chargestations/{station_id}"
         api_key = await self._resolve_api_key()
@@ -210,7 +224,10 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as response:
-                if response.status in (401, 403) and self._auto_api_key_enabled:
+                if (
+                    response.status in (401, 403)
+                    and self._auto_api_key_enabled
+                ):
                     _LOGGER.info(
                         "API key rejected (HTTP %s), refreshing key",
                         response.status,
@@ -225,7 +242,10 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
                         if retry_response.status == 200:
                             data = await retry_response.json()
                             _LOGGER.debug(
-                                "Fetched station data for %s" " (after key refresh)",
+                                (
+                                    "Fetched station data for %s"
+                                    " (after key refresh)"
+                                ),
                                 station_id,
                             )
                             return data
@@ -283,7 +303,9 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
         weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         result = {}
         for day_num in range(7):
-            stats = self._weekday_stats.get(str(day_num), {"total": 0, "occupied": 0})
+            stats = self._weekday_stats.get(
+                str(day_num), {"total": 0, "occupied": 0}
+            )
             total = stats["total"]
             occupied = stats["occupied"]
             pct = (occupied / total * 100) if total > 0 else 0.0
@@ -294,7 +316,9 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
         """Get accumulated average occupancy % by hour of day."""
         result = {}
         for hour in range(24):
-            stats = self._hourly_stats.get(str(hour), {"total": 0, "occupied": 0})
+            stats = self._hourly_stats.get(
+                str(hour), {"total": 0, "occupied": 0}
+            )
             total = stats["total"]
             occupied = stats["occupied"]
             pct = (occupied / total * 100) if total > 0 else 0.0

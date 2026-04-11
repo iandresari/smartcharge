@@ -7,7 +7,8 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 ## Features
 
 - **Easy Configuration**: Search nearby stations on a map or enter a station ID directly — one config entry per station
-- **Single Entity per Station**: One sensor per station showing `available` or `occupied`, with a dynamic name like `2 / 5 - StationName`
+- **Custom Friendly Name**: Set a custom static part of the sensor's friendly name during setup or reconfiguration. By default, this uses the EVSE code (e.g. `MVV`) and station number (e.g. `MVV_station_829151`).
+- **Single Entity per Station**: One sensor per station showing `available` or `occupied`, with a dynamic name like `2 / 5 - StationName`. For stations with more than 9 charge points, the available count is spaced (e.g. `1 0 / 10 - StationName`).
 - **Charge Point Details**: Every charge point's status, power, and connector type exposed as entity attributes
 - **Occupancy Tracking**: Persistent occupancy histograms by hour-of-day and weekday, accumulating over time and surviving restarts
 - **Map Integration**: GPS coordinates as attributes so the sensor appears on the HA map
@@ -37,6 +38,7 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 4. Choose **Search Nearby Stations** (recommended) to find stations on a map, or enter a station ID manually
 5. If searching: drag the map pin to your area, adjust the radius, then pick a station from the results
 6. Configure the update interval (60–3600 seconds, default 300)
+7. Optionally set a custom static part of the friendly name. If left blank, the default is the EVSE code and station number (e.g. `MVV_station_829151`).
 
 To monitor multiple stations, add the integration once per station.
 
@@ -59,12 +61,12 @@ If you prefer to enter a station ID directly, you can find it using your browser
 
 ## Entities
 
-Each config entry (one per station) creates a single sensor:
+Each config entry (one per station) creates a single sensor. You can reconfigure the integration at any time via the Home Assistant UI (Options):
 
 ### Station Availability Sensor
 
 - **State**: `available` (at least one charge point is free) or `occupied` (all charge points in use)
-- **Dynamic Name**: Updates to show availability, e.g. `2 / 5 - Hauptstraße 10, Stuttgart`
+- **Dynamic Name**: Updates to show availability, e.g. `2 / 5 - Hauptstraße 10, Stuttgart`. For stations with more than 9 charge points, the available count is spaced (e.g. `1 0 / 10 - StationName`).
 - **Icon**: Switches between `mdi:ev-station` and `mdi:ev-station-unavailable`
 
 ### Attributes
