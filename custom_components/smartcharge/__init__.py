@@ -7,6 +7,7 @@ from typing import Final
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
@@ -35,6 +36,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Clean up orphaned entities from older versions of the integration
+    ent_reg = er.async_get(hass)
+    entities = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
+    station_id = entry.data.get("station_id", "")
+    expected_unique_id = f"{station_id}_availability"
+    for entity in entities:
+        if entity.unique_id != expected_unique_id:
+            _LOGGER.info(
+                "Removing orphaned entity %s (unique_id=%s)",
+                entity.entity_id,
+                entity.unique_id,
+            )
+            ent_reg.async_remove(entity.entity_id)
 
     await async_setup_services(hass)
 

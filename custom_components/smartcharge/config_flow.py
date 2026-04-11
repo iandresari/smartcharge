@@ -176,7 +176,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             lat = s.get("lat", "?")
             lon = s.get("lon", "?")
             detail = f"- **{name}** (ID: {sid})"
-            if short_addr:
+            if short_addr and short_addr != name:
                 detail += f"\n  {short_addr}"
             detail += f"\n  GPS: {lat}, {lon}"
             station_details_lines.append(detail)
