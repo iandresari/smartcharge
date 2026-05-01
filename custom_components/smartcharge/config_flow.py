@@ -26,7 +26,10 @@ from .const import (
     CONF_STATION_NAME,
     CONF_UPDATE_INTERVAL,
     CONF_STATIC_FRIENDLY_NAME,
+    CONF_TARIFF_PRICE_PER_KWH,
+    CONF_TARIFF_BASE_FEE,
     DEFAULT_AUTO_API_KEY,
+    DEFAULT_TARIFF_BASE_FEE,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
 )
@@ -409,10 +412,11 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 or default_static
             )
 
+            tariff_price = user_input.get(CONF_TARIFF_PRICE_PER_KWH)
+            tariff_base = user_input.get(CONF_TARIFF_BASE_FEE, DEFAULT_TARIFF_BASE_FEE)
+
             return self.async_create_entry(
-                title=(
-                    f"EnBW - " f"{self.station_data.get('name', 'Charging Station')}"
-                ),
+                title=static_friendly_name,
                 data={
                     CONF_STATION_ID: self.station_data.get("station_id"),
                     CONF_STATION_NAME: self.station_data.get("name"),
@@ -422,6 +426,8 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 options={
                     CONF_AUTO_API_KEY: auto_api_key,
                     CONF_MANUAL_API_KEY: manual_api_key,
+                    CONF_TARIFF_PRICE_PER_KWH: tariff_price,
+                    CONF_TARIFF_BASE_FEE: tariff_base,
                 },
             )
 
@@ -446,6 +452,19 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_STATIC_FRIENDLY_NAME,
                     default=default_static,
                 ): str,
+                vol.Required(
+                    CONF_TARIFF_PRICE_PER_KWH,
+                ): vol.All(
+                    vol.Coerce(float),
+                    vol.Range(min=0),
+                ),
+                vol.Optional(
+                    CONF_TARIFF_BASE_FEE,
+                    default=DEFAULT_TARIFF_BASE_FEE,
+                ): vol.All(
+                    vol.Coerce(float),
+                    vol.Range(min=0),
+                ),
             }
         )
 
@@ -585,6 +604,10 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
             CONF_AUTO_API_KEY, DEFAULT_AUTO_API_KEY
         )
         manual_api_key = self.config_entry.options.get(CONF_MANUAL_API_KEY, "")
+        tariff_price = self.config_entry.options.get(CONF_TARIFF_PRICE_PER_KWH, 0.0)
+        tariff_base = self.config_entry.options.get(
+            CONF_TARIFF_BASE_FEE, DEFAULT_TARIFF_BASE_FEE
+        )
 
         return self.async_show_form(
             step_id="init",
@@ -595,6 +618,12 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
                     ): vol.All(vol.Coerce(int), vol.Range(min=60, max=3600)),
                     vol.Optional(CONF_AUTO_API_KEY, default=auto_api_key): bool,
                     vol.Optional(CONF_MANUAL_API_KEY, default=manual_api_key): str,
+                    vol.Required(
+                        CONF_TARIFF_PRICE_PER_KWH, default=tariff_price
+                    ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                    vol.Optional(CONF_TARIFF_BASE_FEE, default=tariff_base): vol.All(
+                        vol.Coerce(float), vol.Range(min=0)
+                    ),
                 }
             ),
         )

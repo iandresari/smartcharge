@@ -24,6 +24,8 @@ from .const import (
     CHARGE_POINT_STATUS,
     CONF_STATION_ID,
     CONF_STATION_NAME,
+    CONF_TARIFF_PRICE_PER_KWH,
+    CONF_TARIFF_BASE_FEE,
     DOMAIN,
     STATUS_ICONS,
 )
@@ -167,5 +169,13 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
         # Occupancy histograms (previously on the separate occupancy sensor)
         attrs[ATTR_OCCUPANCY_WEEKDAY] = self.coordinator.get_occupancy_by_weekday()
         attrs[ATTR_OCCUPANCY_HOURLY] = self.coordinator.get_occupancy_by_hour()
+
+        # Tariff
+        options = self.coordinator.entry.options
+        tariff_price = options.get(CONF_TARIFF_PRICE_PER_KWH)
+        tariff_base = options.get(CONF_TARIFF_BASE_FEE, 0)
+        if tariff_price is not None:
+            attrs["tariff_price_ct_per_kwh"] = tariff_price
+            attrs["tariff_base_fee_ct"] = tariff_base
 
         return attrs

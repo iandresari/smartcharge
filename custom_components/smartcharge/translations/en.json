@@ -57,7 +57,9 @@
           "update_interval": "Update Interval (seconds)",
           "auto_api_key": "Automatic API key renewal",
           "manual_api_key": "Manual API key (only used when auto-renewal is off)",
-          "static_friendly_name": "Custom Friendly Name (leave blank for default)"
+          "static_friendly_name": "Custom Friendly Name (leave blank for default)",
+          "tariff_price_ct_per_kwh": "Energy price (ct/kWh)",
+          "tariff_base_fee_ct": "Session base fee (ct, 0 if none)"
         }
       }
     },
@@ -87,7 +89,9 @@
           "update_interval": "Data Update Interval (seconds)",
           "auto_api_key": "Automatic API key renewal",
           "manual_api_key": "Manual API key (only used when auto-renewal is off)",
-          "electricitymap_api_key": "electricityMap API Key"
+          "electricitymap_api_key": "electricityMap API Key",
+          "tariff_price_ct_per_kwh": "Energy price (ct/kWh)",
+          "tariff_base_fee_ct": "Session base fee (ct, 0 if none)"
         }
       }
     }
