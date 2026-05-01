@@ -34,6 +34,10 @@ DEFAULT_UPDATE_INTERVAL: Final = 300  # 5 minutes
 DEFAULT_AUTO_API_KEY: Final = True
 DEFAULT_TARIFF_BASE_FEE: Final = 0
 
+# Shared hub device identifiers
+HUB_CARS_ID: Final = f"{DOMAIN}_cars"
+HUB_STATIONS_ID: Final = f"{DOMAIN}_stations"
+
 # Status mapping (API returns uppercase values)
 CHARGE_POINT_STATUS = {
     "AVAILABLE": "available",

@@ -25,6 +25,7 @@ from .const import (
     CONF_TARIFF_BASE_FEE,
     CONF_TARIFF_PRICE_PER_KWH,
     DOMAIN,
+    HUB_CARS_ID,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class CarChargingSensor(SensorEntity):
             identifiers={(DOMAIN, entry.entry_id)},
             name=car_name,
             model="Electric Vehicle",
+            via_device=(DOMAIN, HUB_CARS_ID),
         )
 
         # Internal state — read by child sensors
