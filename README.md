@@ -59,7 +59,7 @@ To track multiple cars, add the integration once per car.
 8. Optionally set a custom static part of the friendly name. If left blank, the default is the EVSE code and station number (e.g. `MVV_station_829151`).
 9. Set the **tariff price** (ct/kWh) — required. Optionally set a **base fee** (ct per session) for proximity-based billing to cars.
 
-One sensor is created and grouped under a single device named after the friendly name.
+One sensor is created and grouped under the **SmartCharge hub device** as a child device named after the friendly name.
 
 To monitor multiple stations, add the integration once per station.
 
@@ -91,9 +91,9 @@ Accumulated stats are kept in-memory and reset when HA restarts.
 
 When the car is within range of a configured charging station that has a tariff set, charging costs are billed to the car automatically. The one-off base fee is added when a new session starts (car arrives at the station and begins charging); per-kWh cost accrues during the session.
 
-### Updating the API Key or Linked Entities
+### Updating Car Settings
 
-To change any car setting, go to the integration entry → **Configure**. You can update the electricityMap API key; other settings (device tracker, power sensor, odometer) require removing and re-adding the car entry.
+To update any car setting, go to the integration entry → **Reconfigure**. You can change the car name, device tracker, charging power sensor, and odometer sensor. To update the electricityMap API key, use **Configure** (Options).
 
 ## Getting Station IDs (Manual Fallback)
 
@@ -114,10 +114,11 @@ If you prefer to enter a station ID directly, you can find it using your browser
 
 ## Devices
 
-Each config entry creates a **device** in HA. Going to **Settings → Devices & Services → SmartCharge** shows one device card per car or station. Clicking a device opens an auto-generated dashboard with all its sensors.
+Each config entry creates a **device** in HA. Going to **Settings → Devices & Services → SmartCharge** shows a device card per car or station.
 
-- **Car device**: named after the car name you entered during setup
-- **Station device**: named after the static friendly name (e.g. `MVV_station_829151`)
+- **Car device**: named after the car name you entered during setup. Independent top-level device.
+- **SmartCharge hub device**: a single parent device created automatically when you add your first charging station.
+- **Station devices**: each station is a child of the SmartCharge hub, named after its static friendly name (e.g. `MVV_station_829151`). Clicking the hub shows all stations underneath it.
 
 ## Entities
 
@@ -127,7 +128,10 @@ See the [Car Tracking](#car-tracking-green-charging) section above.
 
 ### Station entry (1 sensor per station)
 
-You can reconfigure the integration at any time via the Home Assistant UI (Options):
+You can reconfigure the integration at any time via the Home Assistant UI:
+
+- **Reconfigure**: update the update interval and static friendly name
+- **Configure** (Options): update API key settings and tariff
 
 - **State**: `available` (at least one charge point is free) or `occupied` (all charge points in use)
 - **Dynamic Name**: Updates to show availability, e.g. `2 / 5 - Hauptstraße 10, Stuttgart`. For stations with more than 9 charge points, the available count is spaced (e.g. `1 0 / 10 - StationName`).

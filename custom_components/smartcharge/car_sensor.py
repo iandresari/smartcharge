@@ -34,6 +34,8 @@ class CarChargingSensor(SensorEntity):
     """Primary car sensor: state = live CO2 intensity, attrs = energy mix."""
 
     _attr_should_poll = True
+    _attr_has_entity_name = True
+    _attr_name = "CO2 Intensity"
     _attr_native_unit_of_measurement = "gCO2/kWh"
     _attr_icon = "mdi:molecule-co2"
 
@@ -42,7 +44,6 @@ class CarChargingSensor(SensorEntity):
         self.hass = hass
         self.entry = entry
         car_name = entry.data.get("car_name", "")
-        self._attr_name = f"Car CO2 Intensity ({car_name})"
         self._attr_unique_id = entry.entry_id
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
@@ -321,14 +322,14 @@ class _CarChildSensor(SensorEntity):
     """Base class for car child sensors that read from CarChargingSensor."""
 
     _attr_should_poll = False
+    _attr_has_entity_name = True
     _name_suffix: str = ""
     _uid_suffix: str = ""
 
     def __init__(self, main: CarChargingSensor, entry: ConfigEntry) -> None:
         super().__init__()
         self._main = main
-        car_name = entry.data.get("car_name", "")
-        self._attr_name = f"Car {self._name_suffix} ({car_name})"
+        self._attr_name = self._name_suffix
         self._attr_unique_id = f"{entry.entry_id}_{self._uid_suffix}"
         self._attr_device_info = main._attr_device_info
 
