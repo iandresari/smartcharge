@@ -16,7 +16,6 @@ from .const import (
     CONF_STATIC_FRIENDLY_NAME,
     CONF_STATION_ID,
     DOMAIN,
-    HUB_ID,
     PLATFORM_SENSOR,
 )
 from .coordinator import EnBWChargingCoordinator
@@ -35,16 +34,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     dev_reg = dr.async_get(hass)
 
-    # Register the shared SmartCharge hub first; all cars and stations are
-    # children of it. async_get_or_create is idempotent — only one hub device
-    # is ever created regardless of how many entries call this.
-    dev_reg.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, HUB_ID)},
-        name="SmartCharge",
-        model="SmartCharge",
-    )
-
     if entry.data.get("entry_type") == "car":
         hass.data[DOMAIN][entry.entry_id] = None
         dev_reg.async_get_or_create(
@@ -52,7 +41,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.data.get("car_name", "Car"),
             model="Electric Vehicle",
-            via_device=(DOMAIN, HUB_ID),
         )
     else:
         session = async_get_clientsession(hass)
@@ -66,7 +54,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             identifiers={(DOMAIN, station_id)},
             name=station_display_name,
             model="Charging Station",
-            via_device=(DOMAIN, HUB_ID),
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

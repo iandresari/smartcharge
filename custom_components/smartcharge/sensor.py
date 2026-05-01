@@ -28,7 +28,6 @@ from .const import (
     CONF_TARIFF_PRICE_PER_KWH,
     CONF_TARIFF_BASE_FEE,
     DOMAIN,
-    HUB_ID,
     STATUS_ICONS,
 )
 from .car_sensor import (
@@ -116,7 +115,6 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
             identifiers={(DOMAIN, station_id)},
             name=self.static_friendly_name,
             model="Charging Station",
-            via_device=(DOMAIN, HUB_ID),
         )
 
     def _get_counts(self) -> tuple[int, int]:
