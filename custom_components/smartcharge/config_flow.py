@@ -12,6 +12,8 @@ from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    EntitySelector,
+    EntitySelectorConfig,
     LocationSelector,
     LocationSelectorConfig,
 )
@@ -108,8 +110,12 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required("car_name"): str,
-                    vol.Required("device_tracker"): str,
-                    vol.Required("charging_power_entity"): str,
+                    vol.Required("device_tracker"): EntitySelector(
+                        EntitySelectorConfig(domain="device_tracker")
+                    ),
+                    vol.Required("charging_power_entity"): EntitySelector(
+                        EntitySelectorConfig(domain="sensor")
+                    ),
                     vol.Required("electricitymap_api_key"): str,
                 }
             ),
