@@ -114,7 +114,6 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
             identifiers={(DOMAIN, station_id)},
             name=self.static_friendly_name,
             model="Charging Station",
-            via_device=(DOMAIN, DOMAIN),
         )
 
     def _get_counts(self) -> tuple[int, int]:

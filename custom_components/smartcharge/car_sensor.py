@@ -220,6 +220,13 @@ class CarChargingSensor(SensorEntity):
                             energy_mix[src.get("productionType", "other")] = src.get(
                                 "percent", 0
                             )
+                    elif resp.status in (401, 403):
+                        _LOGGER.warning(
+                            "electricityMap returned HTTP %s — API key is invalid "
+                            "or expired. Update it via Settings → Devices & Services "
+                            "→ SmartCharge → Configure.",
+                            resp.status,
+                        )
                     else:
                         _LOGGER.warning("electricityMap returned HTTP %s", resp.status)
             except Exception as exc:
@@ -375,7 +382,7 @@ class CarAccumCostSensor(_CarChildSensor):
     _uid_suffix = "cost"
     _attr_native_unit_of_measurement = "EUR"
     _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_icon = "mdi:currency-eur"
 
     @property

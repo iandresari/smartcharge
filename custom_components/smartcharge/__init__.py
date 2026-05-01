@@ -13,6 +13,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 
 from .const import (
+    CONF_STATIC_FRIENDLY_NAME,
     CONF_STATION_ID,
     DOMAIN,
     PLATFORM_SENSOR,
@@ -31,23 +32,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
 
+    dev_reg = dr.async_get(hass)
+
     if entry.data.get("entry_type") == "car":
         hass.data[DOMAIN][entry.entry_id] = None
+        # Pre-register the car device so entities are correctly associated
+        # with it when the sensor platform loads.
+        dev_reg.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=entry.data.get("car_name", "Car"),
+            model="Electric Vehicle",
+        )
     else:
         session = async_get_clientsession(hass)
         coordinator = EnBWChargingCoordinator(hass, session, entry)
         await coordinator.async_config_entry_first_refresh()
         hass.data[DOMAIN][entry.entry_id] = coordinator
-        # Register/update the shared hub device so stations can reference it
-        # via via_device. Associating it with each station's config_entry_id
-        # means it persists as long as at least one station entry exists.
-        dev_reg = dr.async_get(hass)
+        # Pre-register the station device so entities are correctly associated
+        # with it when the sensor platform loads.
+        station_id = entry.data.get(CONF_STATION_ID, "")
+        station_display_name = entry.data.get(CONF_STATIC_FRIENDLY_NAME) or station_id
         dev_reg.async_get_or_create(
             config_entry_id=entry.entry_id,
-            identifiers={(DOMAIN, DOMAIN)},
-            name="SmartCharge",
-            manufacturer="SmartCharge",
-            model="EV Charging Monitor",
+            identifiers={(DOMAIN, station_id)},
+            name=station_display_name,
+            model="Charging Station",
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
