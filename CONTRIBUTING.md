@@ -68,6 +68,16 @@ pytest tests/test_config_flow.py
 pytest --cov=enbw_charging tests/
 ```
 
+### Local Validation
+
+Before pushing, run the local validator to cover the non-Docker checks used in this repository:
+
+```bash
+python scripts/validate_local.py
+```
+
+This validates JSON files, checks translation key parity, and runs Black plus flake8.
+
 ### Test Structure
 ```
 tests/

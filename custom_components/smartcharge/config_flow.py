@@ -47,7 +47,86 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle user step - choose to search map, browse, or enter ID."""
+        """Initial step: choose to add a Car or Charging Station."""
+        if user_input is not None:
+            selection = user_input.get("entry_type")
+            if selection == "car":
+                return await self.async_step_car()
+            elif selection == "station":
+                return await self.async_step_station()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("entry_type"): vol.In(
+                        {
+                            "car": "Car (track charging by GPS)",
+                            "station": "Charging Station (EnBW or manual)",
+                        }
+                    )
+                }
+            ),
+            description_placeholders={},
+        )
+
+    async def async_step_car(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Config flow for adding a car (GPS-based tracking)."""
+        errors = {}
+        if user_input is not None:
+            car_name = user_input.get("car_name", "").strip()
+            device_tracker = user_input.get("device_tracker", "").strip()
+            charging_power_entity = user_input.get("charging_power_entity", "").strip()
+            electricitymap_api_key = user_input.get(
+                "electricitymap_api_key", ""
+            ).strip()
+            if (
+                not car_name
+                or not device_tracker
+                or not charging_power_entity
+                or not electricitymap_api_key
+            ):
+                errors["base"] = "missing_fields"
+            else:
+                # Save config entry for car, store API key in options
+                return self.async_create_entry(
+                    title=f"Car: {car_name}",
+                    data={
+                        "entry_type": "car",
+                        "car_name": car_name,
+                        "device_tracker": device_tracker,
+                        "charging_power_entity": charging_power_entity,
+                    },
+                    options={
+                        "electricitymap_api_key": electricitymap_api_key,
+                    },
+                )
+        return self.async_show_form(
+            step_id="car",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("car_name"): str,
+                    vol.Required("device_tracker"): str,
+                    vol.Required("charging_power_entity"): str,
+                    vol.Required("electricitymap_api_key"): str,
+                }
+            ),
+            errors=errors,
+            description_placeholders={
+                "api_key_help": (
+                    "Enter your electricityMap API key. "
+                    "Get one at https://electricitymaps.com/"
+                )
+            },
+        )
+
+    async def async_step_station(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Config flow for adding a charging station (existing logic)."""
+        # Reuse the old user step logic for stations
         if user_input is not None:
             action = user_input.get("action")
             if action == "search":
@@ -57,7 +136,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_enter_station_id()
 
         return self.async_show_form(
-            step_id="user",
+            step_id="station",
             data_schema=vol.Schema(
                 {
                     vol.Required("action", default="search"): vol.In(
@@ -474,7 +553,22 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle options."""
+        """Handle options — branches on entry type."""
+        if self.config_entry.data.get("entry_type") == "car":
+            if user_input is not None:
+                return self.async_create_entry(title="", data=user_input)
+            current_key = self.config_entry.options.get("electricitymap_api_key", "")
+            return self.async_show_form(
+                step_id="init",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(
+                            "electricitymap_api_key", default=current_key
+                        ): str,
+                    }
+                ),
+            )
+
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 

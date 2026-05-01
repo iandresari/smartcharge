@@ -2,8 +2,25 @@
   "config": {
     "step": {
       "user": {
-        "title": "Setup EnBW EV Charging Stations",
-        "description": "Choose how you'd like to configure your charging stations",
+        "title": "Setup SmartCharge",
+        "description": "Choose whether you want to configure a car or a charging station",
+        "data": {
+          "entry_type": "Entry Type"
+        }
+      },
+      "car": {
+        "title": "Configure Car",
+        "description": "Provide the entities used to track charging and the electricityMap API key.\n\n{api_key_help}",
+        "data": {
+          "car_name": "Car Name",
+          "device_tracker": "Car Device Tracker Entity",
+          "charging_power_entity": "Charging Power Entity",
+          "electricitymap_api_key": "electricityMap API Key"
+        }
+      },
+      "station": {
+        "title": "Configure Charging Station",
+        "description": "Choose how you'd like to configure your charging station",
         "data": {
           "action": "Configuration Method"
         }
@@ -39,7 +56,8 @@
         "data": {
           "update_interval": "Update Interval (seconds)",
           "auto_api_key": "Automatic API key renewal",
-          "manual_api_key": "Manual API key (only used when auto-renewal is off)"
+          "manual_api_key": "Manual API key (only used when auto-renewal is off)",
+          "static_friendly_name": "Custom Friendly Name (leave blank for default)"
         }
       }
     },
@@ -49,7 +67,7 @@
       "missing_station_id": "Station ID is required.",
       "no_charge_points_selected": "Please select at least one charge point.",
       "no_station_data": "Failed to load station data.",
-      "missing_fields": "Please provide both Station ID and Station Name.",
+      "missing_fields": "Please fill in all required fields.",
       "no_stations_found": "No charging stations found in this area. Try increasing the radius or moving the pin.",
       "no_location": "Please select a location on the map.",
       "unknown_error": "An unexpected error occurred. Please try again."
@@ -63,12 +81,13 @@
   "options": {
     "step": {
       "init": {
-        "title": "EnBW Charging Options",
-        "description": "Configure your EnBW charging station settings",
+        "title": "SmartCharge Options",
+        "description": "Configure your SmartCharge settings",
         "data": {
           "update_interval": "Data Update Interval (seconds)",
           "auto_api_key": "Automatic API key renewal",
-          "manual_api_key": "Manual API key (only used when auto-renewal is off)"
+          "manual_api_key": "Manual API key (only used when auto-renewal is off)",
+          "electricitymap_api_key": "electricityMap API Key"
         }
       }
     }

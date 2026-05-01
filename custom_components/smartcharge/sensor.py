@@ -27,6 +27,7 @@ from .const import (
     DOMAIN,
     STATUS_ICONS,
 )
+from .car_sensor import CarChargingSensor
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -37,6 +38,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up sensor entities."""
+    if entry.data.get("entry_type") == "car":
+        async_add_entities([CarChargingSensor(hass, entry)])
+        return
+
     coordinator: DataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     station_id = entry.data.get(CONF_STATION_ID)

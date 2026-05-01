@@ -12,9 +12,9 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 
 from .const import (
+    CONF_STATION_ID,
     DOMAIN,
     PLATFORM_SENSOR,
-    CONF_STATION_ID,
 )
 from .coordinator import EnBWChargingCoordinator
 from .services import async_setup_services
@@ -25,33 +25,35 @@ PLATFORMS: Final = [PLATFORM_SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up EnBW Charging from a config entry."""
-    _LOGGER.debug("Setting up EnBW Charging integration")
+    """Set up SmartCharge from a config entry."""
+    _LOGGER.debug("Setting up SmartCharge integration")
 
     hass.data.setdefault(DOMAIN, {})
 
-    session = async_get_clientsession(hass)
-    coordinator = EnBWChargingCoordinator(hass, session, entry)
-
-    await coordinator.async_config_entry_first_refresh()
-
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+    if entry.data.get("entry_type") == "car":
+        hass.data[DOMAIN][entry.entry_id] = None
+    else:
+        session = async_get_clientsession(hass)
+        coordinator = EnBWChargingCoordinator(hass, session, entry)
+        await coordinator.async_config_entry_first_refresh()
+        hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Clean up orphaned entities from older versions of the integration
-    ent_reg = er.async_get(hass)
-    entities = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
-    station_id = entry.data.get("station_id", "")
-    expected_unique_id = f"{station_id}_availability"
-    for entity in entities:
-        if entity.unique_id != expected_unique_id:
-            _LOGGER.info(
-                "Removing orphaned entity %s (unique_id=%s)",
-                entity.entity_id,
-                entity.unique_id,
-            )
-            ent_reg.async_remove(entity.entity_id)
+    if entry.data.get("entry_type") != "car":
+        # Clean up orphaned entities from older versions of the integration.
+        ent_reg = er.async_get(hass)
+        entities = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
+        station_id = entry.data.get("station_id", "")
+        expected_unique_id = f"{station_id}_availability"
+        for entity in entities:
+            if entity.unique_id != expected_unique_id:
+                _LOGGER.info(
+                    "Removing orphaned entity %s (unique_id=%s)",
+                    entity.entity_id,
+                    entity.unique_id,
+                )
+                ent_reg.async_remove(entity.entity_id)
 
     await async_setup_services(hass)
 
@@ -61,15 +63,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
+    """Unload a config entry and clean up entities for car or station."""
+    if entry.data.get("entry_type") == "car":
+        unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+        if unload_ok:
+            hass.data[DOMAIN].pop(entry.entry_id, None)
+        return unload_ok
+
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
-
     return unload_ok
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Clean up persistent storage when a config entry is removed."""
+    if entry.data.get("entry_type") == "car":
+        # Entity registry cleanup is handled automatically by HA core.
+        _LOGGER.debug("Removed car entry for car %s", entry.data.get("car_name"))
+        return
+
     station_id = entry.data.get(CONF_STATION_ID, "unknown")
     store = Store(hass, 1, f"{DOMAIN}.statistics.{station_id}")
     await store.async_remove()

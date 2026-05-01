@@ -7,10 +7,11 @@
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=iandresari&repository=smartcharge&category=integration)
 
-A Home Assistant integration for monitoring EnBW electric vehicle charging stations in Germany.
+A Home Assistant integration for monitoring EnBW electric vehicle charging stations in Germany and tracking how green the energy is when charging your EV.
 
 ## Features
 
+- **Car Green-Charging Tracker**: Add your car and its GPS tracker to see live CO₂ intensity, energy mix, and accumulated charging stats from [electricityMaps](https://electricitymaps.com/)
 - **Easy Configuration**: Search nearby stations on a map or enter a station ID directly — one config entry per station
 - **Custom Friendly Name**: Set a custom static part of the sensor's friendly name during setup or reconfiguration. By default, this uses the EVSE code (e.g. `MVV`) and station number (e.g. `MVV_station_829151`).
 - **Single Entity per Station**: One sensor per station showing `available` or `occupied`, with a dynamic name like `2 / 5 - StationName`. For stations with more than 9 charge points, the available count is spaced (e.g. `1 0 / 10 - StationName`).
@@ -40,12 +41,45 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 1. Go to Settings → Devices & Services
 2. Click "Add Integration"
 3. Search for "SmartCharge"
-4. Choose **Search Nearby Stations** (recommended) to find stations on a map, or enter a station ID manually
-5. If searching: drag the map pin to your area, adjust the radius, then pick a station from the results
-6. Configure the update interval (60–3600 seconds, default 300)
-7. Optionally set a custom static part of the friendly name. If left blank, the default is the EVSE code and station number (e.g. `MVV_station_829151`).
+4. **Choose what to add**: a **Car** (green-charging tracker) or a **Charging Station** (EnBW availability monitor)
+
+### Adding a Car
+
+5. Enter a **Car Name**, the **Car Device Tracker** entity, the **Charging Power** sensor entity, and your [electricityMap API key](https://electricitymaps.com/)
+
+To track multiple cars, add the integration once per car.
+
+### Adding a Charging Station
+
+5. Choose **Search Nearby Stations** (recommended) to find stations on a map, or enter a station ID manually
+6. If searching: drag the map pin to your area, adjust the radius, then pick a station from the results
+7. Configure the update interval (60–3600 seconds, default 300)
+8. Optionally set a custom static part of the friendly name. If left blank, the default is the EVSE code and station number (e.g. `MVV_station_829151`).
 
 To monitor multiple stations, add the integration once per station.
+
+## Car Tracking (Green Charging)
+
+When you add a **Car** config entry, SmartCharge creates a single sensor per car that shows live CO₂ intensity (gCO₂/kWh) for the electricity grid at the car's GPS location, using the [electricityMaps API](https://electricitymaps.com/).
+
+### Car Sensor
+
+The sensor state is the **live CO₂ intensity in gCO₂/kWh**.
+
+| Attribute | Description |
+|---|---|
+| `charging_power` | Current charging power in W (from your power entity) |
+| `latitude` / `longitude` | Car's current GPS position |
+| `energy_mix` | Live energy source breakdown, e.g. `{"solar": 20, "wind": 30, "nuclear": 40, "coal": 10}` |
+| `accumulated_energy_kwh` | Total kWh charged since the entity was created |
+| `accumulated_co2_g` | Total grams of CO₂ produced for that energy |
+| `energy_histogram` | Accumulated kWh split by energy source |
+
+The sensor polls every 5 minutes. Accumulated stats are kept in-memory and reset when HA restarts.
+
+### Updating the API Key
+
+To change your electricityMap API key, go to the integration entry → **Configure** and enter the new key.
 
 ## Getting Station IDs (Manual Fallback)
 
@@ -66,9 +100,13 @@ If you prefer to enter a station ID directly, you can find it using your browser
 
 ## Entities
 
-Each config entry (one per station) creates a single sensor. You can reconfigure the integration at any time via the Home Assistant UI (Options):
+### Car CO₂ Sensor (car entries)
 
-### Station Availability Sensor
+See the [Car Tracking](#car-tracking-green-charging) section above.
+
+### Station Availability Sensor (station entries)
+
+Each station config entry creates a single sensor. You can reconfigure the integration at any time via the Home Assistant UI (Options):
 
 - **State**: `available` (at least one charge point is free) or `occupied` (all charge points in use)
 - **Dynamic Name**: Updates to show availability, e.g. `2 / 5 - Hauptstraße 10, Stuttgart`. For stations with more than 9 charge points, the available count is spaced (e.g. `1 0 / 10 - StationName`).
@@ -182,6 +220,14 @@ automation:
 - Restart the integration
 
 ## Development
+
+For a local non-Docker approximation of the CI checks, run:
+
+```bash
+python scripts/validate_local.py
+```
+
+The script validates JSON metadata, checks that `strings.json` and `translations/en.json` stay in sync, and runs `black --check` plus `flake8`.
 
 For community discussions:
 - [EnBW Charging Community Thread](https://community.home-assistant.io/t/status-of-enbw-charging-stations/409573)
