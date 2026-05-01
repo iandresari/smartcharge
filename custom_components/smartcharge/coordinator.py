@@ -26,6 +26,7 @@ from .const import (
     CONF_AUTO_API_KEY,
     CONF_MANUAL_API_KEY,
     CONF_STATION_ID,
+    CONF_UPDATE_INTERVAL,
     DEFAULT_AUTO_API_KEY,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
@@ -107,11 +108,15 @@ class EnBWChargingCoordinator(DataUpdateCoordinator):
         entry: ConfigEntry,
     ) -> None:
         """Initialize coordinator."""
+        interval = int(
+            entry.options.get(CONF_UPDATE_INTERVAL)
+            or entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        )
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=DEFAULT_UPDATE_INTERVAL),
+            update_interval=timedelta(seconds=interval),
         )
         self.session = session
         self.entry = entry

@@ -44,7 +44,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Clean up orphaned entities from older versions of the integration.
         ent_reg = er.async_get(hass)
         entities = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
-        station_id = entry.data.get("station_id", "")
+        station_id = entry.data.get(CONF_STATION_ID, "")
         expected_unique_id = f"{station_id}_availability"
         for entity in entities:
             if entity.unique_id != expected_unique_id:
@@ -71,7 +71,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return unload_ok
 
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
+        hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok
 
 

@@ -45,7 +45,9 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 
 ### Adding a Car
 
-5. Enter a **Car Name**, the **Car Device Tracker** entity, the **Charging Power** sensor entity, and your [electricityMap API key](https://electricitymaps.com/)
+5. Enter a **Car Name**, the **Car Device Tracker** entity, the **Charging Power** sensor entity (in kW), an optional **Odometer** sensor (in km, for per-km stats), and your [electricityMap API key](https://electricitymaps.com/)
+
+Six sensors are created and grouped under a single device named after the car.
 
 To track multiple cars, add the integration once per car.
 
@@ -55,31 +57,43 @@ To track multiple cars, add the integration once per car.
 6. If searching: drag the map pin to your area, adjust the radius, then pick a station from the results
 7. Configure the update interval (60–3600 seconds, default 300)
 8. Optionally set a custom static part of the friendly name. If left blank, the default is the EVSE code and station number (e.g. `MVV_station_829151`).
+9. Set the **tariff price** (ct/kWh) — required. Optionally set a **base fee** (ct per session) for proximity-based billing to cars.
+
+One sensor is created and grouped under a single device named after the friendly name.
 
 To monitor multiple stations, add the integration once per station.
 
 ## Car Tracking (Green Charging)
 
-When you add a **Car** config entry, SmartCharge creates a single sensor per car that shows live CO₂ intensity (gCO₂/kWh) for the electricity grid at the car's GPS location, using the [electricityMaps API](https://electricitymaps.com/).
+When you add a **Car** config entry, SmartCharge creates a **device** grouping six sensors per car. All sensors update together every poll cycle (≈ 5 minutes).
 
-### Car Sensor
+### Car Sensors
 
-The sensor state is the **live CO₂ intensity in gCO₂/kWh**.
+| Sensor | State | Unit | Icon |
+|---|---|---|---|
+| **CO2 Intensity** | Live grid CO₂ at the car's GPS location | gCO₂/kWh | `mdi:molecule-co2` |
+| **Accumulated Energy** | Total kWh charged since integration started | kWh | `mdi:ev-station` |
+| **Accumulated CO2** | Total gCO₂ produced for that energy | gCO₂ | `mdi:smog` |
+| **Accumulated Cost** | Total charging cost (proximity billing) | EUR | `mdi:currency-eur` |
+| **CO2 per km** | Average gCO₂ per km driven (requires odometer) | gCO₂/km | `mdi:leaf` |
+| **Cost per km** | Average charging cost per km driven | EUR/km | `mdi:cash-marker` |
+
+The CO2 Intensity sensor has two attributes:
 
 | Attribute | Description |
 |---|---|
-| `charging_power` | Current charging power in W (from your power entity) |
-| `latitude` / `longitude` | Car's current GPS position |
 | `energy_mix` | Live energy source breakdown, e.g. `{"solar": 20, "wind": 30, "nuclear": 40, "coal": 10}` |
-| `accumulated_energy_kwh` | Total kWh charged since the entity was created |
-| `accumulated_co2_g` | Total grams of CO₂ produced for that energy |
-| `energy_histogram` | Accumulated kWh split by energy source |
+| `energy_histogram` | Accumulated kWh split by energy source over the session |
 
-The sensor polls every 5 minutes. Accumulated stats are kept in-memory and reset when HA restarts.
+Accumulated stats are kept in-memory and reset when HA restarts.
 
-### Updating the API Key
+### Cost Billing (Proximity-Based)
 
-To change your electricityMap API key, go to the integration entry → **Configure** and enter the new key.
+When the car is within range of a configured charging station that has a tariff set, charging costs are billed to the car automatically. The one-off base fee is added when a new session starts (car arrives at the station and begins charging); per-kWh cost accrues during the session.
+
+### Updating the API Key or Linked Entities
+
+To change any car setting, go to the integration entry → **Configure**. You can update the electricityMap API key; other settings (device tracker, power sensor, odometer) require removing and re-adding the car entry.
 
 ## Getting Station IDs (Manual Fallback)
 
@@ -98,15 +112,22 @@ If you prefer to enter a station ID directly, you can find it using your browser
 
 > **Tip**: You can also find the API subscription key in the request headers under `Ocp-Apim-Subscription-Key` if you want to set a manual key in the integration options.
 
+## Devices
+
+Each config entry creates a **device** in HA. Going to **Settings → Devices & Services → SmartCharge** shows one device card per car or station. Clicking a device opens an auto-generated dashboard with all its sensors.
+
+- **Car device**: named after the car name you entered during setup
+- **Station device**: named after the static friendly name (e.g. `MVV_station_829151`)
+
 ## Entities
 
-### Car CO₂ Sensor (car entries)
+### Car entry (6 sensors per car)
 
 See the [Car Tracking](#car-tracking-green-charging) section above.
 
-### Station Availability Sensor (station entries)
+### Station entry (1 sensor per station)
 
-Each station config entry creates a single sensor. You can reconfigure the integration at any time via the Home Assistant UI (Options):
+You can reconfigure the integration at any time via the Home Assistant UI (Options):
 
 - **State**: `available` (at least one charge point is free) or `occupied` (all charge points in use)
 - **Dynamic Name**: Updates to show availability, e.g. `2 / 5 - Hauptstraße 10, Stuttgart`. For stations with more than 9 charge points, the available count is spaced (e.g. `1 0 / 10 - StationName`).

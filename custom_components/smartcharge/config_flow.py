@@ -22,6 +22,7 @@ from .const import (
     API_BASE_URL,
     CONF_AUTO_API_KEY,
     CONF_MANUAL_API_KEY,
+    CONF_ODOMETER_ENTITY,
     CONF_STATION_ID,
     CONF_STATION_NAME,
     CONF_UPDATE_INTERVAL,
@@ -95,6 +96,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ):
                 errors["base"] = "missing_fields"
             else:
+                odometer_entity = user_input.get(CONF_ODOMETER_ENTITY) or None
                 # Save config entry for car, store API key in options
                 return self.async_create_entry(
                     title=f"Car: {car_name}",
@@ -103,6 +105,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "car_name": car_name,
                         "device_tracker": device_tracker,
                         "charging_power_entity": charging_power_entity,
+                        CONF_ODOMETER_ENTITY: odometer_entity,
                     },
                     options={
                         "electricitymap_api_key": electricitymap_api_key,
@@ -117,6 +120,9 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         EntitySelectorConfig(domain="device_tracker")
                     ),
                     vol.Required("charging_power_entity"): EntitySelector(
+                        EntitySelectorConfig(domain="sensor")
+                    ),
+                    vol.Optional(CONF_ODOMETER_ENTITY): EntitySelector(
                         EntitySelectorConfig(domain="sensor")
                     ),
                     vol.Required("electricitymap_api_key"): str,
@@ -473,13 +479,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=schema,
             description_placeholders={
                 "update_interval_description": (
-                    "How often to fetch data" " (60-3600 seconds)"
-                ),
-                "static_friendly_name_description": (
-                    (
-                        "Custom static part of the friendly name. "
-                        "Leave blank for default."
-                    )
+                    "How often to fetch data (60-3600 seconds)"
                 ),
             },
         )
@@ -597,9 +597,9 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        update_interval = self.config_entry.data.get(
-            CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
-        )
+        update_interval = self.config_entry.options.get(
+            CONF_UPDATE_INTERVAL
+        ) or self.config_entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
         auto_api_key = self.config_entry.options.get(
             CONF_AUTO_API_KEY, DEFAULT_AUTO_API_KEY
         )

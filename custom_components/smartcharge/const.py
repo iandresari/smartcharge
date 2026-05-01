@@ -27,6 +27,7 @@ CONF_AUTO_API_KEY: Final = "auto_api_key"
 CONF_MANUAL_API_KEY: Final = "manual_api_key"
 CONF_TARIFF_PRICE_PER_KWH: Final = "tariff_price_ct_per_kwh"
 CONF_TARIFF_BASE_FEE: Final = "tariff_base_fee_ct"
+CONF_ODOMETER_ENTITY: Final = "odometer_entity"
 
 # Defaults
 DEFAULT_UPDATE_INTERVAL: Final = 300  # 5 minutes

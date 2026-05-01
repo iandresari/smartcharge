@@ -20,7 +20,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def handle_refresh_data(call: ServiceCall) -> None:
         """Handle manual data refresh."""
-        for entry_id, coordinator in hass.data[DOMAIN].items():
+        for _, coordinator in hass.data[DOMAIN].items():
             if isinstance(coordinator, EnBWChargingCoordinator):
                 await coordinator.async_refresh()
                 _LOGGER.info("Manually refreshed charging station data")

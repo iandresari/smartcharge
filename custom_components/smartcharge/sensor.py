@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import (
@@ -29,7 +30,14 @@ from .const import (
     DOMAIN,
     STATUS_ICONS,
 )
-from .car_sensor import CarChargingSensor
+from .car_sensor import (
+    CarAccumCO2Sensor,
+    CarAccumCostSensor,
+    CarAccumEnergySensor,
+    CarChargingSensor,
+    CarCO2PerKmSensor,
+    CarCostPerKmSensor,
+)
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -41,7 +49,16 @@ async def async_setup_entry(
 ) -> None:
     """Set up sensor entities."""
     if entry.data.get("entry_type") == "car":
-        async_add_entities([CarChargingSensor(hass, entry)])
+        main = CarChargingSensor(hass, entry)
+        children = [
+            CarAccumEnergySensor(main, entry),
+            CarAccumCO2Sensor(main, entry),
+            CarAccumCostSensor(main, entry),
+            CarCO2PerKmSensor(main, entry),
+            CarCostPerKmSensor(main, entry),
+        ]
+        main.register_children(children)
+        async_add_entities([main, *children])
         return
 
     coordinator: DataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
@@ -83,16 +100,21 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
         coordinator: DataUpdateCoordinator,
         station_id: str,
         station_name: str,
-        static_friendly_name: str = None,
+        static_friendly_name: str | None = None,
     ) -> None:
         """Initialize sensor."""
         super().__init__(coordinator)
         self.station_id = station_id
-        self.station_name = station_name or f"Station_{station_id}"
-        self.static_friendly_name = static_friendly_name or self.station_name
+        _station_name = station_name or f"Station_{station_id}"
+        self.static_friendly_name = static_friendly_name or _station_name
 
         self._attr_unique_id = f"{station_id}_availability"
         self.entity_id = f"sensor.sc_station_{station_id}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, station_id)},
+            name=self.static_friendly_name,
+            model="Charging Station",
+        )
 
     def _get_counts(self) -> tuple[int, int]:
         """Return (available, total) charge point counts."""

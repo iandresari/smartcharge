@@ -14,7 +14,8 @@
         "data": {
           "car_name": "Car Name",
           "device_tracker": "Car Device Tracker Entity",
-          "charging_power_entity": "Charging Power Entity",
+          "charging_power_entity": "Charging Power Entity (kW)",
+          "odometer_entity": "Odometer Entity (km, optional)",
           "electricitymap_api_key": "electricityMap API Key"
         }
       },
