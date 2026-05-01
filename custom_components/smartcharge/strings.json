@@ -51,6 +51,18 @@
           "station_id": "Station ID"
         }
       },
+      "reconfigure": {
+        "title": "Reconfigure SmartCharge",
+        "description": "Update the configuration for this entry.",
+        "data": {
+          "car_name": "Car Name",
+          "device_tracker": "Car Device Tracker Entity",
+          "charging_power_entity": "Charging Power Entity (kW)",
+          "odometer_entity": "Odometer Entity (km, optional)",
+          "update_interval": "Update Interval (seconds)",
+          "static_friendly_name": "Custom Friendly Name"
+        }
+      },
       "configure_settings": {
         "title": "Configure Settings",
         "description": "Configure how often to fetch data from the API and API key settings\n\n{update_interval_description}",

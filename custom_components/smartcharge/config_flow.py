@@ -567,6 +567,98 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.error("Error fetching station details: %s", err)
             raise
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle reconfiguration of an existing entry."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if entry.data.get("entry_type") == "car":
+            if user_input is not None:
+                car_name = user_input.get("car_name", "").strip()
+                device_tracker = user_input.get("device_tracker", "").strip()
+                charging_power_entity = user_input.get(
+                    "charging_power_entity", ""
+                ).strip()
+                if not car_name or not device_tracker or not charging_power_entity:
+                    errors["base"] = "missing_fields"
+                else:
+                    return self.async_update_reload_and_abort(
+                        entry,
+                        data={
+                            **entry.data,
+                            "car_name": car_name,
+                            "device_tracker": device_tracker,
+                            "charging_power_entity": charging_power_entity,
+                            CONF_ODOMETER_ENTITY: (
+                                user_input.get(CONF_ODOMETER_ENTITY) or None
+                            ),
+                        },
+                        reason="reconfigure_successful",
+                    )
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(
+                            "car_name",
+                            default=entry.data.get("car_name", ""),
+                        ): str,
+                        vol.Required(
+                            "device_tracker",
+                            default=entry.data.get("device_tracker", ""),
+                        ): EntitySelector(
+                            EntitySelectorConfig(domain="device_tracker")
+                        ),
+                        vol.Required(
+                            "charging_power_entity",
+                            default=entry.data.get("charging_power_entity", ""),
+                        ): EntitySelector(EntitySelectorConfig(domain="sensor")),
+                        vol.Optional(
+                            CONF_ODOMETER_ENTITY,
+                            default=entry.data.get(CONF_ODOMETER_ENTITY),
+                        ): EntitySelector(EntitySelectorConfig(domain="sensor")),
+                    }
+                ),
+                errors=errors,
+            )
+
+        # Station: allow updating interval and friendly name
+        current_interval = entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        current_name = entry.data.get(CONF_STATIC_FRIENDLY_NAME, "")
+        if user_input is not None:
+            new_name = user_input.get(CONF_STATIC_FRIENDLY_NAME, current_name)
+            if isinstance(new_name, str):
+                new_name = new_name.strip() or current_name
+            return self.async_update_reload_and_abort(
+                entry,
+                data={
+                    **entry.data,
+                    CONF_UPDATE_INTERVAL: user_input.get(
+                        CONF_UPDATE_INTERVAL, current_interval
+                    ),
+                    CONF_STATIC_FRIENDLY_NAME: new_name,
+                },
+                reason="reconfigure_successful",
+            )
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_UPDATE_INTERVAL,
+                        default=current_interval,
+                    ): vol.All(vol.Coerce(int), vol.Range(min=60, max=3600)),
+                    vol.Optional(
+                        CONF_STATIC_FRIENDLY_NAME,
+                        default=current_name,
+                    ): str,
+                }
+            ),
+            errors=errors,
+        )
+
 
 class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
     """Options flow for EnBW Charging."""

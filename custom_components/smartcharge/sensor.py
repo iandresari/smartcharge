@@ -8,7 +8,6 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import (
@@ -110,11 +109,6 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
 
         self._attr_unique_id = f"{station_id}_availability"
         self.entity_id = f"sensor.sc_station_{station_id}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, station_id)},
-            name=self.static_friendly_name,
-            model="Charging Station",
-        )
 
     def _get_counts(self) -> tuple[int, int]:
         """Return (available, total) charge point counts."""
