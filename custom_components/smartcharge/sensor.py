@@ -8,7 +8,6 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import (
@@ -108,14 +107,8 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
         _station_name = station_name or f"Station_{station_id}"
         self.static_friendly_name = static_friendly_name or _station_name
 
-        self._attr_has_entity_name = True
         self._attr_unique_id = f"{station_id}_availability"
         self.entity_id = f"sensor.sc_station_{station_id}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, station_id)},
-            name=self.static_friendly_name,
-            model="Charging Station",
-        )
 
     def _get_counts(self) -> tuple[int, int]:
         """Return (available, total) charge point counts."""
@@ -128,13 +121,13 @@ class StationAvailabilitySensor(CoordinatorEntity, SensorEntity):
 
     @property
     def name(self) -> str:
-        """Return availability count; device name is prepended by HA."""
+        """Return dynamic name showing availability and station name."""
         available, total = self._get_counts()
         if total > 9 or available > 9:
             available_str = " ".join(str(available))
         else:
             available_str = str(available)
-        return f"{available_str} / {total}"
+        return f"{available_str} / {total} - {self.static_friendly_name}"
 
     @property
     def icon(self) -> str:
