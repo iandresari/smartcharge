@@ -78,26 +78,23 @@ class CarChargingSensor(SensorEntity):
                                 "percent", 0
                             )
                     else:
-                        co2_intensity = 350
-                        energy_mix = {
-                            "solar": 20,
-                            "coal": 10,
-                            "wind": 30,
-                            "nuclear": 40,
-                        }
+                        _LOGGER.warning("electricityMap returned HTTP %s", resp.status)
+                        co2_intensity = None
+                        energy_mix = {}
             except Exception as e:
-                _LOGGER.warning(f"Failed to fetch electricityMap data: {e}")
-                co2_intensity = 350
-                energy_mix = {"solar": 20, "coal": 10, "wind": 30, "nuclear": 40}
+                _LOGGER.warning("Failed to fetch electricityMap data: %s", e)
+                co2_intensity = None
+                energy_mix = {}
         else:
-            co2_intensity = 350
-            energy_mix = {"solar": 20, "coal": 10, "wind": 30, "nuclear": 40}
+            _LOGGER.debug("No GPS location available, skipping electricityMap call")
+            co2_intensity = None
+            energy_mix = {}
 
-        # Integrate energy
+        # Integrate energy (only when we have real CO2 data)
         now = dt_util.utcnow()
-        if self._last_update is not None:
+        if self._last_update is not None and co2_intensity is not None:
             dt_hours = (now - self._last_update).total_seconds() / 3600.0
-            avg_power = (charging_power + self._last_power) / 2.0
+            avg_power = max((charging_power + self._last_power) / 2.0, 0.0)
             delta_energy = avg_power * dt_hours  # kWh
             self._accum_energy += delta_energy
             self._accum_co2 += delta_energy * co2_intensity
