@@ -16,6 +16,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import StateType
 from homeassistant.util import dt as dt_util
 from homeassistant.util.location import distance as geo_distance
@@ -28,6 +29,8 @@ from .const import (
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
+
+STORAGE_VERSION = 1
 
 
 class CarChargingSensor(SensorEntity):
@@ -65,9 +68,39 @@ class CarChargingSensor(SensorEntity):
         self._last_update = None
         self._last_odometer: float | None = None
         self._charging_session_station: str | None = None
+        self._api_key_error_logged: bool = False
+
+        # Persistent storage (loaded in async_added_to_hass)
+        self._store: Store = Store(
+            hass, STORAGE_VERSION, f"{DOMAIN}.car.{entry.entry_id}"
+        )
 
         # Populated by sensor.py after all entities are created
         self._children: list[_CarChildSensor] = []
+
+    async def async_added_to_hass(self) -> None:
+        """Load persisted accumulator values when entity is added to HA."""
+        await super().async_added_to_hass()
+        stored = await self._store.async_load()
+        if stored:
+            self._accum_energy = stored.get("accum_energy", 0.0)
+            self._accum_co2 = stored.get("accum_co2", 0.0)
+            self._accum_cost_eur = stored.get("accum_cost_eur", 0.0)
+            self._total_km = stored.get("total_km", 0.0)
+            self._last_odometer = stored.get("last_odometer")
+            _LOGGER.debug("Loaded persisted car accumulator data for %s", self.entry.entry_id)
+
+    async def _save_accumulators(self) -> None:
+        """Persist accumulator values to disk."""
+        await self._store.async_save(
+            {
+                "accum_energy": self._accum_energy,
+                "accum_co2": self._accum_co2,
+                "accum_cost_eur": self._accum_cost_eur,
+                "total_km": self._total_km,
+                "last_odometer": self._last_odometer,
+            }
+        )
 
     def register_children(self, children: list[_CarChildSensor]) -> None:
         """Register child sensors to be refreshed after each update."""
@@ -216,17 +249,25 @@ class CarChargingSensor(SensorEntity):
                     if resp.status == 200:
                         data = await resp.json()
                         co2_intensity = data.get("carbonIntensity")
+                        self._api_key_error_logged = False
                         for src in data.get("generationMix", []):
                             energy_mix[src.get("productionType", "other")] = src.get(
                                 "percent", 0
                             )
                     elif resp.status in (401, 403):
-                        _LOGGER.warning(
-                            "electricityMap returned HTTP %s — API key is invalid "
-                            "or expired. Update it via Settings → Devices & Services "
-                            "→ SmartCharge → Configure.",
-                            resp.status,
-                        )
+                        if not self._api_key_error_logged:
+                            _LOGGER.warning(
+                                "electricityMap returned HTTP %s — API key is invalid "
+                                "or expired. Update it via Settings → Devices & Services "
+                                "→ SmartCharge → Configure.",
+                                resp.status,
+                            )
+                            self._api_key_error_logged = True
+                        else:
+                            _LOGGER.debug(
+                                "electricityMap still returning HTTP %s (key not updated)",
+                                resp.status,
+                            )
                     else:
                         _LOGGER.warning("electricityMap returned HTTP %s", resp.status)
             except Exception as exc:
@@ -302,6 +343,9 @@ class CarChargingSensor(SensorEntity):
             self._last_power = charging_power
         self._state = co2_intensity
         self._energy_mix = energy_mix
+
+        # Persist accumulators so they survive HA restarts
+        await self._save_accumulators()
 
         # Notify child sensors so they update in the same poll cycle
         for child in self._children:

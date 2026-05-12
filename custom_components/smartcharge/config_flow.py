@@ -581,6 +581,9 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 charging_power_entity = user_input.get(
                     "charging_power_entity", ""
                 ).strip()
+                electricitymap_api_key = user_input.get(
+                    "electricitymap_api_key", ""
+                ).strip()
                 if not car_name or not device_tracker or not charging_power_entity:
                     errors["base"] = "missing_fields"
                 else:
@@ -594,6 +597,10 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_ODOMETER_ENTITY: (
                                 user_input.get(CONF_ODOMETER_ENTITY) or None
                             ),
+                        },
+                        options={
+                            **entry.options,
+                            "electricitymap_api_key": electricitymap_api_key,
                         },
                         reason="reconfigure_successful",
                     )
@@ -619,6 +626,10 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_ODOMETER_ENTITY,
                             default=entry.data.get(CONF_ODOMETER_ENTITY),
                         ): EntitySelector(EntitySelectorConfig(domain="sensor")),
+                        vol.Required(
+                            "electricitymap_api_key",
+                            default=entry.options.get("electricitymap_api_key", ""),
+                        ): str,
                     }
                 ),
                 errors=errors,
