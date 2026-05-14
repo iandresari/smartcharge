@@ -11,7 +11,7 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 
 ## Features
 
-- **Car Green-Charging Tracker**: Add your car and its GPS tracker to see live CO₂ intensity, energy mix, and accumulated charging stats from [electricityMaps](https://electricitymaps.com/)
+- **Car Green-Charging Tracker**: Add your car and its GPS tracker to see live CO₂ intensity and accumulated charging stats using the [Electricity Maps](https://www.home-assistant.io/integrations/electricity_maps/) Home Assistant integration
 - **Persistent Accumulators**: Energy, CO₂, and cost totals survive Home Assistant restarts — nothing is lost
 - **Proximity-Based Billing**: Costs are automatically billed when the car is near a configured station. One-off session base fees are applied once per session start; per-kWh cost accrues continuously
 - **Multiple Station Types**: EnBW public stations, custom home wallboxes, and temporary one-off stops — all handled with accurate billing
@@ -48,7 +48,7 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 
 ### Adding a Car
 
-5. Enter a **Car Name**, the **Car Device Tracker** entity, the **Charging Power** sensor entity (in kW), an optional **Odometer** sensor (in km, for per-km stats), and your [electricityMap API key](https://electricitymaps.com/)
+5. Enter a **Car Name**, the **Car Device Tracker** entity, the **Charging Power** sensor entity (in kW), an optional **Odometer** sensor (in km, for per-km stats), and the **CO₂ Intensity** entity (e.g. from the [Electricity Maps integration](https://www.home-assistant.io/integrations/electricity_maps/) — auto-selected if found)
 
 Six sensors are created and grouped under a single device named after the car.
 
@@ -71,7 +71,7 @@ Search for an EnBW station at the car's current GPS position. The search expands
 Register a one-off charging stop using the car's **current GPS position** as the station location. The entry is automatically deleted once the car's odometer increases — i.e., after driving away. Requires at least one car entry to be configured.
 
 #### Custom Wallbox
-Add a fixed wallbox at the car's current GPS location. Provide a **live price entity** (ct/kWh) and optionally a **live CO₂ intensity entity** (gCO₂/kWh). When a CO₂ entity is provided it is used instead of the electricityMap API. Requires at least one car entry to be configured.
+Add a fixed wallbox at the car's current GPS location. Provide a **live price entity** (ct/kWh) and optionally a **live CO₂ intensity entity** (gCO₂/kWh). When a CO₂ entity is provided it takes priority over the car's configured CO₂ entity. Requires at least one car entry to be configured.
 
 > **Note**: Temporary stations and wallboxes create a lightweight config entry with no sensor entities. They exist solely to supply location and tariff data to the car tracker's proximity-billing logic.
 
@@ -94,12 +94,7 @@ When you add a **Car** config entry, SmartCharge creates a **device** grouping s
 | **CO2 per km** | Average gCO₂ per km driven (requires odometer) | gCO₂/km | `mdi:leaf` |
 | **Cost per km** | Average charging cost per km driven | EUR/km | `mdi:cash-marker` |
 
-The CO2 Intensity sensor has two attributes:
-
-| Attribute | Description |
-|---|---|
-| `energy_mix` | Live energy source breakdown, e.g. `{"solar": 20, "wind": 30, "nuclear": 40, "coal": 10}` |
-| `energy_histogram` | Accumulated kWh split by energy source over the session |
+The CO2 Intensity sensor has no additional attributes. CO₂ and cost accumulators are persisted across restarts.
 
 ### Cost Billing (Proximity-Based)
 
@@ -114,7 +109,7 @@ For **temporary stations**, the tariff is fixed at the time of adding.
 
 ### Updating Car Settings
 
-Use the integration entry → **Reconfigure** to update the car name, device tracker, power sensor, odometer sensor, electricityMap API key, or auto-discovery toggle. The same settings are also accessible under **Configure** (Options).
+Use the integration entry → **Reconfigure** to update the car name, device tracker, power sensor, odometer sensor, CO₂ intensity entity, or auto-discovery toggle. The same settings are also accessible under **Configure** (Options).
 
 ## Getting Station IDs (Manual Fallback)
 
@@ -168,7 +163,7 @@ See the [Car Tracking](#car-tracking-green-charging) section above.
 
 | Entry type | Reconfigure | Options (Configure) |
 |---|---|---|
-| **Car** | Car name, tracker, power sensor, odometer, API key, auto-discovery | API key, auto-discovery |
+| **Car** | Car name, tracker, power sensor, odometer, CO₂ entity, auto-discovery | CO₂ entity, auto-discovery |
 | **EnBW Station** | Update interval, friendly name, tariff | Update interval, API key mode, tariff |
 | **Wallbox** | Price entity, CO₂ entity | Price entity, CO₂ entity |
 | **Temporary Station** | Tariff price, base fee | Tariff price, base fee |

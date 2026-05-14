@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import aiohttp
-
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -64,8 +62,6 @@ class CarChargingSensor(SensorEntity):
 
         # Internal state — read by child sensors
         self._state: float | None = None
-        self._energy_mix: dict[str, float] = {}
-        self._energy_histogram: dict[str, float] = {}
         self._accum_energy: float = 0.0
         self._accum_co2: float = 0.0
         self._accum_cost_eur: float = 0.0
@@ -76,7 +72,6 @@ class CarChargingSensor(SensorEntity):
         self._last_update = None
         self._last_odometer: float | None = None
         self._charging_session_station: str | None = None
-        self._api_key_error_logged: bool = False
         self._discovery_triggered: bool = False
 
         # Persistent storage (loaded in async_added_to_hass)
@@ -90,7 +85,15 @@ class CarChargingSensor(SensorEntity):
     async def async_added_to_hass(self) -> None:
         """Load persisted accumulator values when entity is added to HA."""
         await super().async_added_to_hass()
-        stored = await self._store.async_load()
+        try:
+            stored = await self._store.async_load()
+        except Exception as err:
+            _LOGGER.warning(
+                "Failed to load persisted accumulator data for %s: %s",
+                self.entry.entry_id,
+                err,
+            )
+            stored = None
         if stored:
             self._accum_energy = stored.get("accum_energy", 0.0)
             self._accum_co2 = stored.get("accum_co2", 0.0)
@@ -104,15 +107,22 @@ class CarChargingSensor(SensorEntity):
 
     async def _save_accumulators(self) -> None:
         """Persist accumulator values to disk."""
-        await self._store.async_save(
-            {
-                "accum_energy": self._accum_energy,
-                "accum_co2": self._accum_co2,
-                "accum_cost_eur": self._accum_cost_eur,
-                "total_km": self._total_km,
-                "last_odometer": self._last_odometer,
-            }
-        )
+        try:
+            await self._store.async_save(
+                {
+                    "accum_energy": self._accum_energy,
+                    "accum_co2": self._accum_co2,
+                    "accum_cost_eur": self._accum_cost_eur,
+                    "total_km": self._total_km,
+                    "last_odometer": self._last_odometer,
+                }
+            )
+        except Exception as err:
+            _LOGGER.warning(
+                "Failed to persist accumulator data for %s: %s",
+                self.entry.entry_id,
+                err,
+            )
 
     def register_children(self, children: list[_CarChildSensor]) -> None:
         """Register child sensors to be refreshed after each update."""
@@ -376,13 +386,15 @@ class CarChargingSensor(SensorEntity):
             )
 
         # --- CO2 intensity source ---
-        # Use the wallbox's dedicated entity when present; otherwise call the
-        # electricityMap API.
+        # Priority: nearby wallbox entity → car's configured CO2 entity.
         co2_intensity: float | None = None
-        energy_mix: dict[str, float] = {}
-        if co2_entity_id is not None and nearby_station_id is not None:
-            # Wallbox with a live CO2 entity — skip the external API call.
-            co2_state = self.hass.states.get(co2_entity_id)
+        co2_source = (
+            co2_entity_id
+            if co2_entity_id is not None and nearby_station_id is not None
+            else self.entry.options.get(CONF_CO2_ENTITY) or None
+        )
+        if co2_source is not None:
+            co2_state = self.hass.states.get(co2_source)
             if co2_state is not None and co2_state.state not in (
                 "unavailable",
                 "unknown",
@@ -391,54 +403,10 @@ class CarChargingSensor(SensorEntity):
                     co2_intensity = float(co2_state.state)
                 except (TypeError, ValueError):
                     _LOGGER.debug(
-                        "Could not parse wallbox CO2 entity state: %s",
-                        co2_state.state,
+                        "Could not parse CO2 entity state: %s", co2_state.state
                     )
             else:
-                _LOGGER.debug("Wallbox CO2 entity %s is unavailable", co2_entity_id)
-        elif latitude is not None and longitude is not None:
-            try:
-                session = async_get_clientsession(self.hass)
-                api_key = self.entry.options.get("electricitymap_api_key", "")
-                headers = {"auth-token": api_key, "Accept": "application/json"}
-                url = (
-                    "https://api.electricitymap.org/v3/carbon-intensity/latest"
-                    f"?lat={latitude}&lon={longitude}"
-                )
-                async with session.get(
-                    url,
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        co2_intensity = data.get("carbonIntensity")
-                        self._api_key_error_logged = False
-                        for src in data.get("generationMix", []):
-                            energy_mix[src.get("productionType", "other")] = src.get(
-                                "percent", 0
-                            )
-                    elif resp.status in (401, 403):
-                        if not self._api_key_error_logged:
-                            _LOGGER.warning(
-                                "electricityMap returned HTTP %s — API key is invalid"
-                                " or expired. Update it via Settings → Devices &"
-                                " Services → SmartCharge → Configure.",
-                                resp.status,
-                            )
-                            self._api_key_error_logged = True
-                        else:
-                            _LOGGER.debug(
-                                "electricityMap still returning HTTP %s"
-                                " (key not updated)",
-                                resp.status,
-                            )
-                    else:
-                        _LOGGER.warning("electricityMap returned HTTP %s", resp.status)
-            except Exception as exc:
-                _LOGGER.warning("Failed to fetch electricityMap data: %s", exc)
-        else:
-            _LOGGER.debug("No GPS location available, skipping electricityMap call")
+                _LOGGER.debug("CO2 entity %s is unavailable", co2_source)
 
         # --- Billing session management ---
         if power_available:
@@ -503,12 +471,6 @@ class CarChargingSensor(SensorEntity):
             # Guard against malformed API responses (negative sentinel values).
             if co2_intensity is not None and co2_intensity >= 0:
                 self._accum_co2 += delta_energy * co2_intensity
-                for src, pct in energy_mix.items():
-                    if pct >= 0:
-                        self._energy_histogram[src] = (
-                            self._energy_histogram.get(src, 0.0)
-                            + delta_energy * pct / 100.0
-                        )
 
         # Always advance the timestamp so the next interval is correctly sized.
         # Only advance _last_power when we have a valid reading so the trapezoid
@@ -517,7 +479,6 @@ class CarChargingSensor(SensorEntity):
         if power_available:
             self._last_power = charging_power
         self._state = co2_intensity
-        self._energy_mix = energy_mix
 
         # Persist accumulators so they survive HA restarts
         await self._save_accumulators()
@@ -533,10 +494,7 @@ class CarChargingSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {
-            "energy_mix": self._energy_mix,
-            "energy_histogram": self._energy_histogram,
-        }
+        return {}
 
 
 # ---------------------------------------------------------------------------

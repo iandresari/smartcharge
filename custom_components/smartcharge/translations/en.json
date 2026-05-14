@@ -10,13 +10,14 @@
       },
       "car": {
         "title": "Configure Car",
-        "description": "Provide the entities used to track charging and the electricityMap API key.\n\n{api_key_help}",
+        "description": "Provide the entities used to track charging. Select the CO\u2082 intensity sensor from the Electricity Maps integration (pre-selected if found).",
         "data": {
           "car_name": "Car Name",
           "device_tracker": "Car Device Tracker Entity",
           "charging_power_entity": "Charging Power Entity (kW)",
           "odometer_entity": "Odometer Entity (km, optional)",
-          "electricitymap_api_key": "electricityMap API Key"
+          "co2_entity": "CO\u2082 Intensity Entity (gCO\u2082/kWh)",
+          "auto_discovery": "Automatically discover charging stations while charging"
         }
       },
       "station": {
@@ -98,7 +99,7 @@
           "device_tracker": "Car Device Tracker Entity",
           "charging_power_entity": "Charging Power Entity (kW)",
           "odometer_entity": "Odometer Entity (km, optional)",
-          "electricitymap_api_key": "electricityMap API Key",
+          "co2_entity": "CO\u2082 Intensity Entity (gCO\u2082/kWh)",
           "auto_discovery": "Automatically discover charging stations while charging",
           "update_interval": "Update Interval (seconds)",
           "static_friendly_name": "Custom Friendly Name",
@@ -149,7 +150,7 @@
           "update_interval": "Data Update Interval (seconds)",
           "auto_api_key": "Automatic API key renewal",
           "manual_api_key": "Manual API key (only used when auto-renewal is off)",
-          "electricitymap_api_key": "electricityMap API Key",
+          "co2_entity": "CO\u2082 Intensity Entity (gCO\u2082/kWh)",
           "auto_discovery": "Automatically discover charging stations while charging",
           "tariff_price_ct_per_kwh": "Energy price (ct/kWh)",
           "tariff_base_fee_ct": "Session base fee (ct, 0 if none)"

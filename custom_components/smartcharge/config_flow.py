@@ -10,6 +10,7 @@ import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     EntitySelector,
@@ -47,6 +48,19 @@ from .const import (
 from .coordinator import async_search_stations, fetch_api_key, get_api_headers
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
+
+
+def _find_electricity_maps_co2_entity(hass) -> str | None:
+    """Return the CO2 intensity sensor from the electricity_maps integration."""
+    registry = er.async_get(hass)
+    for entry in registry.entities.values():
+        if (
+            entry.platform == "electricity_maps"
+            and entry.domain == "sensor"
+            and "co2" in entry.entity_id.lower()
+        ):
+            return entry.entity_id
+    return None
 
 
 class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -93,23 +107,15 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Config flow for adding a car (GPS-based tracking)."""
         errors = {}
+        default_co2_entity = _find_electricity_maps_co2_entity(self.hass)
         if user_input is not None:
             car_name = user_input.get("car_name", "").strip()
             device_tracker = user_input.get("device_tracker", "").strip()
             charging_power_entity = user_input.get("charging_power_entity", "").strip()
-            electricitymap_api_key = user_input.get(
-                "electricitymap_api_key", ""
-            ).strip()
-            if (
-                not car_name
-                or not device_tracker
-                or not charging_power_entity
-                or not electricitymap_api_key
-            ):
+            if not car_name or not device_tracker or not charging_power_entity:
                 errors["base"] = "missing_fields"
             else:
                 odometer_entity = user_input.get(CONF_ODOMETER_ENTITY) or None
-                # Save config entry for car, store API key in options
                 return self.async_create_entry(
                     title=f"Car: {car_name}",
                     data={
@@ -120,7 +126,10 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_ODOMETER_ENTITY: odometer_entity,
                     },
                     options={
-                        "electricitymap_api_key": electricitymap_api_key,
+                        CONF_CO2_ENTITY: user_input.get(CONF_CO2_ENTITY) or None,
+                        CONF_AUTO_DISCOVERY: user_input.get(
+                            CONF_AUTO_DISCOVERY, DEFAULT_AUTO_DISCOVERY
+                        ),
                     },
                 )
         return self.async_show_form(
@@ -137,16 +146,15 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Optional(CONF_ODOMETER_ENTITY): EntitySelector(
                         EntitySelectorConfig(domain="sensor")
                     ),
-                    vol.Required("electricitymap_api_key"): str,
+                    vol.Optional(
+                        CONF_CO2_ENTITY, default=default_co2_entity
+                    ): EntitySelector(EntitySelectorConfig(domain="sensor")),
+                    vol.Optional(
+                        CONF_AUTO_DISCOVERY, default=DEFAULT_AUTO_DISCOVERY
+                    ): bool,
                 }
             ),
             errors=errors,
-            description_placeholders={
-                "api_key_help": (
-                    "Enter your electricityMap API key. "
-                    "Get one at https://electricitymaps.com/"
-                )
-            },
         )
 
     async def async_step_station(
@@ -583,7 +591,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 stations = await async_search_stations(session, lat, lon, radius_m)
                 if stations:
                     break
-            except ConnectionError as err:
+            except Exception as err:
                 _LOGGER.error("Station search failed at radius %d m: %s", radius_m, err)
                 return self.async_show_form(
                     step_id="auto_find",
@@ -857,9 +865,6 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 charging_power_entity = user_input.get(
                     "charging_power_entity", ""
                 ).strip()
-                electricitymap_api_key = user_input.get(
-                    "electricitymap_api_key", ""
-                ).strip()
                 if not car_name or not device_tracker or not charging_power_entity:
                     errors["base"] = "missing_fields"
                 else:
@@ -876,7 +881,7 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         },
                         options={
                             **entry.options,
-                            "electricitymap_api_key": electricitymap_api_key,
+                            CONF_CO2_ENTITY: (user_input.get(CONF_CO2_ENTITY) or None),
                             CONF_AUTO_DISCOVERY: user_input.get(
                                 CONF_AUTO_DISCOVERY, DEFAULT_AUTO_DISCOVERY
                             ),
@@ -905,10 +910,10 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_ODOMETER_ENTITY,
                             default=entry.data.get(CONF_ODOMETER_ENTITY),
                         ): EntitySelector(EntitySelectorConfig(domain="sensor")),
-                        vol.Required(
-                            "electricitymap_api_key",
-                            default=entry.options.get("electricitymap_api_key", ""),
-                        ): str,
+                        vol.Optional(
+                            CONF_CO2_ENTITY,
+                            default=entry.options.get(CONF_CO2_ENTITY),
+                        ): EntitySelector(EntitySelectorConfig(domain="sensor")),
                         vol.Optional(
                             CONF_AUTO_DISCOVERY,
                             default=entry.options.get(
@@ -1056,7 +1061,7 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
         if self.config_entry.data.get("entry_type") == "car":
             if user_input is not None:
                 return self.async_create_entry(title="", data=user_input)
-            current_key = self.config_entry.options.get("electricitymap_api_key", "")
+            current_co2_entity = self.config_entry.options.get(CONF_CO2_ENTITY)
             current_discovery = self.config_entry.options.get(
                 CONF_AUTO_DISCOVERY, DEFAULT_AUTO_DISCOVERY
             )
@@ -1064,9 +1069,9 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
                 step_id="init",
                 data_schema=vol.Schema(
                     {
-                        vol.Required(
-                            "electricitymap_api_key", default=current_key
-                        ): str,
+                        vol.Optional(
+                            CONF_CO2_ENTITY, default=current_co2_entity
+                        ): EntitySelector(EntitySelectorConfig(domain="sensor")),
                         vol.Optional(
                             CONF_AUTO_DISCOVERY, default=current_discovery
                         ): bool,

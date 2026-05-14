@@ -119,7 +119,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         return
 
     station_id = entry.data.get(CONF_STATION_ID, "unknown")
-    store = Store(hass, 1, f"{DOMAIN}.statistics.{station_id}")
+    store = Store(hass, STORAGE_VERSION, f"{DOMAIN}.statistics.{station_id}")
     await store.async_remove()
     _LOGGER.debug("Removed persistent statistics for station %s", station_id)
 
