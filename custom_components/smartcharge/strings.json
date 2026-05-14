@@ -101,7 +101,9 @@
           "electricitymap_api_key": "electricityMap API Key",
           "auto_discovery": "Automatically discover charging stations while charging",
           "update_interval": "Update Interval (seconds)",
-          "static_friendly_name": "Custom Friendly Name"
+          "static_friendly_name": "Custom Friendly Name",
+          "tariff_price_ct_per_kwh": "Energy price (ct/kWh)",
+          "tariff_base_fee_ct": "Session base fee (ct, 0 if none)"
         }
       },
       "configure_settings": {

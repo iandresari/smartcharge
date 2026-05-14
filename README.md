@@ -169,7 +169,7 @@ See the [Car Tracking](#car-tracking-green-charging) section above.
 | Entry type | Reconfigure | Options (Configure) |
 |---|---|---|
 | **Car** | Car name, tracker, power sensor, odometer, API key, auto-discovery | API key, auto-discovery |
-| **EnBW Station** | Update interval, friendly name | Update interval, API key mode, tariff |
+| **EnBW Station** | Update interval, friendly name, tariff | Update interval, API key mode, tariff |
 | **Wallbox** | Price entity, CO₂ entity | Price entity, CO₂ entity |
 | **Temporary Station** | Tariff price, base fee | Tariff price, base fee |
 

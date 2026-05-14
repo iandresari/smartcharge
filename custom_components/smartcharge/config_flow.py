@@ -984,21 +984,35 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors=errors,
             )
 
-        # EnBW station: allow updating interval and friendly name.
+        # EnBW station: allow updating interval, friendly name, and tariff.
         current_interval = entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
         current_name = entry.data.get(CONF_STATIC_FRIENDLY_NAME, "")
+        current_tariff_price = entry.options.get(CONF_TARIFF_PRICE_PER_KWH, 0.0)
+        current_tariff_base = entry.options.get(
+            CONF_TARIFF_BASE_FEE, DEFAULT_TARIFF_BASE_FEE
+        )
         if user_input is not None:
             new_name = user_input.get(CONF_STATIC_FRIENDLY_NAME, current_name)
             if isinstance(new_name, str):
                 new_name = new_name.strip() or current_name
             return self.async_update_reload_and_abort(
                 entry,
+                title=new_name,
                 data={
                     **entry.data,
                     CONF_UPDATE_INTERVAL: user_input.get(
                         CONF_UPDATE_INTERVAL, current_interval
                     ),
                     CONF_STATIC_FRIENDLY_NAME: new_name,
+                },
+                options={
+                    **entry.options,
+                    CONF_TARIFF_PRICE_PER_KWH: user_input.get(
+                        CONF_TARIFF_PRICE_PER_KWH
+                    ),
+                    CONF_TARIFF_BASE_FEE: user_input.get(
+                        CONF_TARIFF_BASE_FEE, DEFAULT_TARIFF_BASE_FEE
+                    ),
                 },
                 reason="reconfigure_successful",
             )
@@ -1014,6 +1028,14 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_STATIC_FRIENDLY_NAME,
                         default=current_name,
                     ): str,
+                    vol.Required(
+                        CONF_TARIFF_PRICE_PER_KWH,
+                        default=current_tariff_price,
+                    ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                    vol.Optional(
+                        CONF_TARIFF_BASE_FEE,
+                        default=current_tariff_base,
+                    ): vol.All(vol.Coerce(float), vol.Range(min=0)),
                 }
             ),
             errors=errors,
