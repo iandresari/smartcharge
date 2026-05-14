@@ -15,7 +15,12 @@ from homeassistant.helpers.storage import Store
 from .const import (
     CONF_STATION_ID,
     DOMAIN,
+    ENTRY_TYPE_TEMPORARY,
+    ENTRY_TYPE_WALLBOX,
+    CONF_STATION_LAT,
+    CONF_STATION_LON,
     PLATFORM_SENSOR,
+    STORAGE_VERSION,
 )
 from .coordinator import EnBWChargingCoordinator
 from .services import async_setup_services
@@ -41,6 +46,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             name=entry.data.get("car_name", "Car"),
             model="Electric Vehicle",
         )
+    elif entry.data.get("entry_type") in (ENTRY_TYPE_TEMPORARY, ENTRY_TYPE_WALLBOX):
+        # Temporary stations and wallboxes have no coordinator and no sensor
+        # entities — they exist purely to supply lat/lon + tariff data for the
+        # proximity matcher in CarChargingSensor.
+        hass.data[DOMAIN][entry.entry_id] = {
+            "lat": entry.data.get(CONF_STATION_LAT),
+            "lon": entry.data.get(CONF_STATION_LON),
+        }
+        return True
     else:
         session = async_get_clientsession(hass)
         coordinator = EnBWChargingCoordinator(hass, session, entry)
@@ -73,7 +87,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry and clean up entities for car or station."""
-    if entry.data.get("entry_type") == "car":
+    entry_type = entry.data.get("entry_type")
+
+    if entry_type in (ENTRY_TYPE_TEMPORARY, ENTRY_TYPE_WALLBOX):
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+        return True
+
+    if entry_type == "car":
         unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
         if unload_ok:
             hass.data[DOMAIN].pop(entry.entry_id, None)
@@ -86,9 +106,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Clean up persistent storage when a config entry is removed."""
-    if entry.data.get("entry_type") == "car":
-        # Entity registry cleanup is handled automatically by HA core.
+    entry_type = entry.data.get("entry_type")
+
+    if entry_type == "car":
+        store = Store(hass, STORAGE_VERSION, f"{DOMAIN}.car.{entry.entry_id}")
+        await store.async_remove()
         _LOGGER.debug("Removed car entry for car %s", entry.data.get("car_name"))
+        return
+
+    if entry_type in (ENTRY_TYPE_TEMPORARY, ENTRY_TYPE_WALLBOX):
+        _LOGGER.debug("Removed %s entry", entry_type)
         return
 
     station_id = entry.data.get(CONF_STATION_ID, "unknown")

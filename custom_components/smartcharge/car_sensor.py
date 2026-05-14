@@ -22,15 +22,23 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.location import distance as geo_distance
 
 from .const import (
+    CONF_AUTO_DISCOVERY,
+    CONF_CAR_ENTRY_ID,
+    CONF_CO2_ENTITY,
     CONF_ODOMETER_ENTITY,
+    CONF_ODOMETER_SNAPSHOT,
+    CONF_PRICE_ENTITY,
     CONF_TARIFF_BASE_FEE,
     CONF_TARIFF_PRICE_PER_KWH,
+    DEFAULT_AUTO_DISCOVERY,
     DOMAIN,
+    ENTRY_TYPE_TEMPORARY,
+    ENTRY_TYPE_WALLBOX,
+    STORAGE_VERSION,
 )
+from .coordinator import async_search_stations
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
-
-STORAGE_VERSION = 1
 
 
 class CarChargingSensor(SensorEntity):
@@ -69,6 +77,7 @@ class CarChargingSensor(SensorEntity):
         self._last_odometer: float | None = None
         self._charging_session_station: str | None = None
         self._api_key_error_logged: bool = False
+        self._discovery_triggered: bool = False
 
         # Persistent storage (loaded in async_added_to_hass)
         self._store: Store = Store(
@@ -88,7 +97,10 @@ class CarChargingSensor(SensorEntity):
             self._accum_cost_eur = stored.get("accum_cost_eur", 0.0)
             self._total_km = stored.get("total_km", 0.0)
             self._last_odometer = stored.get("last_odometer")
-            _LOGGER.debug("Loaded persisted car accumulator data for %s", self.entry.entry_id)
+            _LOGGER.debug(
+                "Loaded persisted car accumulator data for %s",
+                self.entry.entry_id,
+            )
 
     async def _save_accumulators(self) -> None:
         """Persist accumulator values to disk."""
@@ -111,31 +123,85 @@ class CarChargingSensor(SensorEntity):
         car_lat: float,
         car_lon: float,
         gps_accuracy: float | None,
-    ) -> tuple[str | None, float | None, float]:
-        """Return (entry_id, price_ct_per_kwh, base_fee_ct) for the nearest
-        station with a tariff within proximity threshold.
-        Returns (None, None, 0.0) when none found."""
-        # Safe-cast: gps_accuracy may arrive as a string from some integrations.
+    ) -> tuple[str | None, float | None, float, str | None]:
+        """Return (entry_id, price_ct_per_kwh, base_fee_ct, co2_entity_id)
+        for the nearest station within the proximity threshold.
+        Returns (None, None, 0.0, None) when none found."""
         try:
             threshold = (
                 max(float(gps_accuracy), 50.0) if gps_accuracy is not None else 50.0
             )
         except (TypeError, ValueError):
             threshold = 50.0
+
         domain_data = self.hass.data.get(DOMAIN, {})
         for station_entry in self.hass.config_entries.async_entries(DOMAIN):
-            if station_entry.data.get("entry_type") == "car":
+            entry_type = station_entry.data.get("entry_type")
+            if entry_type == "car":
                 continue
-            coordinator = domain_data.get(station_entry.entry_id)
-            if coordinator is None or coordinator.data is None:
+
+            entry_value = domain_data.get(station_entry.entry_id)
+            if entry_value is None:
                 continue
-            station_lat = coordinator.data.get("lat")
-            station_lon = coordinator.data.get("lon")
+
+            if entry_type in (ENTRY_TYPE_TEMPORARY, ENTRY_TYPE_WALLBOX):
+                # Plain dict stored by __init__.py for lightweight entries.
+                station_lat = entry_value.get("lat")
+                station_lon = entry_value.get("lon")
+            else:
+                # Coordinator object for regular EnBW stations.
+                if not hasattr(entry_value, "data") or entry_value.data is None:
+                    continue
+                station_lat = entry_value.data.get("lat")
+                station_lon = entry_value.data.get("lon")
+
             if station_lat is None or station_lon is None:
                 continue
             dist = geo_distance(car_lat, car_lon, station_lat, station_lon)
             if dist is None or dist > threshold:
                 continue
+
+            if entry_type == ENTRY_TYPE_WALLBOX:
+                price_entity_id = station_entry.options.get(CONF_PRICE_ENTITY)
+                co2_entity_id = station_entry.options.get(CONF_CO2_ENTITY)
+                if price_entity_id is None:
+                    continue
+                price_state = self.hass.states.get(price_entity_id)
+                if price_state is None or price_state.state in (
+                    "unavailable",
+                    "unknown",
+                ):
+                    _LOGGER.debug(
+                        "Wallbox price entity %s unavailable", price_entity_id
+                    )
+                    continue
+                try:
+                    tariff_price_f = float(price_state.state)
+                except (TypeError, ValueError):
+                    _LOGGER.warning(
+                        "Could not parse wallbox price entity %s", price_entity_id
+                    )
+                    continue
+                return station_entry.entry_id, tariff_price_f, 0.0, co2_entity_id
+
+            if entry_type == ENTRY_TYPE_TEMPORARY:
+                tariff_price = station_entry.options.get(CONF_TARIFF_PRICE_PER_KWH)
+                if tariff_price is None:
+                    continue
+                try:
+                    tariff_price_f = float(tariff_price)
+                    tariff_base_f = float(
+                        station_entry.options.get(CONF_TARIFF_BASE_FEE, 0) or 0
+                    )
+                except (TypeError, ValueError):
+                    _LOGGER.warning(
+                        "Invalid tariff config for temporary station %s, skipping",
+                        station_entry.entry_id,
+                    )
+                    continue
+                return station_entry.entry_id, tariff_price_f, tariff_base_f, None
+
+            # Regular EnBW station
             tariff_price = station_entry.options.get(CONF_TARIFF_PRICE_PER_KWH)
             if tariff_price is None:
                 continue
@@ -150,8 +216,75 @@ class CarChargingSensor(SensorEntity):
                     station_entry.entry_id,
                 )
                 continue
-            return station_entry.entry_id, tariff_price_f, tariff_base_f
-        return None, None, 0.0
+            return station_entry.entry_id, tariff_price_f, tariff_base_f, None
+
+        return None, None, 0.0, None
+
+    async def _cleanup_temporary_stations(self, current_odometer: float) -> None:
+        """Remove temporary station entries for THIS car whose snapshot was exceeded."""
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if entry.data.get("entry_type") != ENTRY_TYPE_TEMPORARY:
+                continue
+            # Only manage stations that belong to this car entry.
+            if entry.data.get(CONF_CAR_ENTRY_ID) != self.entry.entry_id:
+                continue
+            snapshot = entry.data.get(CONF_ODOMETER_SNAPSHOT, 0.0)
+            if snapshot < current_odometer:
+                _LOGGER.info(
+                    "Removing temporary station %s "
+                    "(odometer snapshot %.1f km < current %.1f km)",
+                    entry.entry_id,
+                    snapshot,
+                    current_odometer,
+                )
+                self.hass.async_create_task(
+                    self.hass.config_entries.async_remove(entry.entry_id)
+                )
+
+    async def _trigger_station_discovery(
+        self,
+        lat: float,
+        lon: float,
+        gps_accuracy: float | None,  # noqa: ARG002  (reserved for future radius tuning)
+    ) -> None:
+        """Search for a nearby EnBW station and fire an integration_discovery flow."""
+        # Avoid starting a second flow when one is already waiting for the user.
+        for progress in self.hass.config_entries.flow.async_progress():
+            if (
+                progress.get("handler") == DOMAIN
+                and progress.get("context", {}).get("source") == "integration_discovery"
+            ):
+                _LOGGER.debug(
+                    "Auto-discovery flow already in progress, skipping new trigger"
+                )
+                return
+
+        session = async_get_clientsession(self.hass)
+        stations: list[dict] = []
+        for radius_m in (50, 100, 200):
+            try:
+                stations = await async_search_stations(session, lat, lon, radius_m)
+                if stations:
+                    break
+            except Exception as err:
+                _LOGGER.debug("Auto-discovery search at %d m failed: %s", radius_m, err)
+                return
+
+        if not stations:
+            _LOGGER.debug("Auto-discovery: no stations found within 200 m")
+            return
+
+        _LOGGER.info(
+            "Auto-discovery: found %d station(s) near car, opening config flow",
+            len(stations),
+        )
+        self.hass.async_create_task(
+            self.hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": "integration_discovery"},
+                data={"stations": stations, "car_entry_id": self.entry.entry_id},
+            )
+        )
 
     async def async_update(self) -> None:
         """Fetch power, location, electricity map data; integrate accumulators."""
@@ -227,12 +360,43 @@ class CarChargingSensor(SensorEntity):
                     and current_odometer > self._last_odometer
                 ):
                     self._total_km += current_odometer - self._last_odometer
+                    await self._cleanup_temporary_stations(current_odometer)
                 self._last_odometer = current_odometer
 
-        # --- electricityMap API ---
+        # --- Station proximity (resolved before CO2 to enable wallbox override) ---
+        # Only open/close sessions when the power reading is valid; an unavailable
+        # power sensor must not look like the car stopped charging.
+        nearby_station_id: str | None = None
+        tariff_price: float | None = None
+        tariff_base: float = 0.0
+        co2_entity_id: str | None = None
+        if latitude is not None and longitude is not None:
+            nearby_station_id, tariff_price, tariff_base, co2_entity_id = (
+                self._find_nearby_station(latitude, longitude, gps_accuracy)
+            )
+
+        # --- CO2 intensity source ---
+        # Use the wallbox's dedicated entity when present; otherwise call the
+        # electricityMap API.
         co2_intensity: float | None = None
         energy_mix: dict[str, float] = {}
-        if latitude is not None and longitude is not None:
+        if co2_entity_id is not None and nearby_station_id is not None:
+            # Wallbox with a live CO2 entity — skip the external API call.
+            co2_state = self.hass.states.get(co2_entity_id)
+            if co2_state is not None and co2_state.state not in (
+                "unavailable",
+                "unknown",
+            ):
+                try:
+                    co2_intensity = float(co2_state.state)
+                except (TypeError, ValueError):
+                    _LOGGER.debug(
+                        "Could not parse wallbox CO2 entity state: %s",
+                        co2_state.state,
+                    )
+            else:
+                _LOGGER.debug("Wallbox CO2 entity %s is unavailable", co2_entity_id)
+        elif latitude is not None and longitude is not None:
             try:
                 session = async_get_clientsession(self.hass)
                 api_key = self.entry.options.get("electricitymap_api_key", "")
@@ -257,15 +421,16 @@ class CarChargingSensor(SensorEntity):
                     elif resp.status in (401, 403):
                         if not self._api_key_error_logged:
                             _LOGGER.warning(
-                                "electricityMap returned HTTP %s — API key is invalid "
-                                "or expired. Update it via Settings → Devices & Services "
-                                "→ SmartCharge → Configure.",
+                                "electricityMap returned HTTP %s — API key is invalid"
+                                " or expired. Update it via Settings → Devices &"
+                                " Services → SmartCharge → Configure.",
                                 resp.status,
                             )
                             self._api_key_error_logged = True
                         else:
                             _LOGGER.debug(
-                                "electricityMap still returning HTTP %s (key not updated)",
+                                "electricityMap still returning HTTP %s"
+                                " (key not updated)",
                                 resp.status,
                             )
                     else:
@@ -275,17 +440,7 @@ class CarChargingSensor(SensorEntity):
         else:
             _LOGGER.debug("No GPS location available, skipping electricityMap call")
 
-        # --- Station proximity & billing session ---
-        # Only open/close sessions when the power reading is valid; an unavailable
-        # power sensor must not look like the car stopped charging.
-        nearby_station_id: str | None = None
-        tariff_price: float | None = None
-        tariff_base: float = 0.0
-        if latitude is not None and longitude is not None:
-            nearby_station_id, tariff_price, tariff_base = self._find_nearby_station(
-                latitude, longitude, gps_accuracy
-            )
-
+        # --- Billing session management ---
         if power_available:
             if nearby_station_id and charging_power > 0:
                 if self._charging_session_station != nearby_station_id:
@@ -312,6 +467,26 @@ class CarChargingSensor(SensorEntity):
                     self._charging_session_station,
                 )
                 self._charging_session_station = None
+                self._discovery_triggered = False
+
+        # --- Auto-discovery ---
+        # When charging but no known station is nearby and no discovery has been
+        # triggered for this session yet, search the EnBW API and open a
+        # config-flow notification for the user.
+        auto_discovery = self.entry.options.get(
+            CONF_AUTO_DISCOVERY, DEFAULT_AUTO_DISCOVERY
+        )
+        if (
+            auto_discovery
+            and power_available
+            and charging_power > 0
+            and nearby_station_id is None
+            and latitude is not None
+            and longitude is not None
+            and not self._discovery_triggered
+        ):
+            await self._trigger_station_discovery(latitude, longitude, gps_accuracy)
+            self._discovery_triggered = True
 
         # --- Integrate energy, CO2, cost ---
         # Energy and cost accumulate whenever the power reading is valid so they

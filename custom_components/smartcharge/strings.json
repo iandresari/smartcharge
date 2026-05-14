@@ -26,6 +26,45 @@
           "action": "Configuration Method"
         }
       },
+      "temporary": {
+        "title": "Temporary Charging Station",
+        "description": "Configure a one-off charging stop. This station will be automatically removed once your car's odometer increases from its current value.",
+        "data": {
+          "car_entry_id": "Car",
+          "tariff_price_ct_per_kwh": "Energy price (ct/kWh)",
+          "tariff_base_fee_ct": "Session base fee (ct, 0 if none)"
+        }
+      },
+      "wallbox": {
+        "title": "Custom Wallbox",
+        "description": "Add a wallbox at the car's current location. Uses live entity values for CO2 intensity and energy price.",
+        "data": {
+          "car_entry_id": "Car",
+          "co2_entity": "CO2 Intensity Entity (gCO2/kWh)",
+          "price_entity": "Energy Price Entity (ct/kWh)"
+        }
+      },
+      "auto_find": {
+        "title": "Find Current Charging Station",
+        "description": "Search for an EnBW charging station at the car's current GPS location. The search expands from 50 m to 200 m if no station is found immediately.",
+        "data": {
+          "car_entry_id": "Car"
+        }
+      },
+      "pick_car": {
+        "title": "Select Car",
+        "description": "Select which car to use for this configuration.",
+        "data": {
+          "car_entry_id": "Car"
+        }
+      },
+      "integration_discovery": {
+        "title": "Charging Station Discovered",
+        "description": "A charging station was found near your car. Select a station to add it to SmartCharge.",
+        "data": {
+          "station": "Charging Station"
+        }
+      },
       "search_map": {
         "title": "Search Nearby Stations",
         "description": "Drag the pin on the map to the area where your charging station is located. Adjust the radius to cover the search area.\n\nThe map defaults to your Home Assistant home location.",
@@ -59,6 +98,8 @@
           "device_tracker": "Car Device Tracker Entity",
           "charging_power_entity": "Charging Power Entity (kW)",
           "odometer_entity": "Odometer Entity (km, optional)",
+          "electricitymap_api_key": "electricityMap API Key",
+          "auto_discovery": "Automatically discover charging stations while charging",
           "update_interval": "Update Interval (seconds)",
           "static_friendly_name": "Custom Friendly Name"
         }
@@ -85,12 +126,16 @@
       "missing_fields": "Please fill in all required fields.",
       "no_stations_found": "No charging stations found in this area. Try increasing the radius or moving the pin.",
       "no_location": "Please select a location on the map.",
-      "unknown_error": "An unexpected error occurred. Please try again."
+      "unknown_error": "An unexpected error occurred. Please try again.",
+      "gps_unavailable": "Car GPS location is unavailable. Make sure the device tracker is reporting a valid position.",
+      "no_stations_found_nearby": "No charging stations found within 200 m of the car's current location.",
+      "no_car_entries": "No car entries found. Please add a car first."
     },
     "abort": {
       "reconfigure_successful": "Configuration updated successfully.",
       "reconfigure_failed": "Failed to reconfigure.",
-      "no_station_data": "No station data available."
+      "no_station_data": "No station data available.",
+      "no_car_entries": "No car entries found. Please add a car first."
     }
   },
   "options": {
@@ -103,6 +148,7 @@
           "auto_api_key": "Automatic API key renewal",
           "manual_api_key": "Manual API key (only used when auto-renewal is off)",
           "electricitymap_api_key": "electricityMap API Key",
+          "auto_discovery": "Automatically discover charging stations while charging",
           "tariff_price_ct_per_kwh": "Energy price (ct/kWh)",
           "tariff_base_fee_ct": "Session base fee (ct, 0 if none)"
         }

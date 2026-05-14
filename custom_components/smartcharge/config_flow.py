@@ -21,20 +21,30 @@ from homeassistant.helpers.selector import (
 from .const import (
     API_BASE_URL,
     CONF_AUTO_API_KEY,
+    CONF_AUTO_DISCOVERY,
+    CONF_CAR_ENTRY_ID,
+    CONF_CO2_ENTITY,
     CONF_MANUAL_API_KEY,
     CONF_ODOMETER_ENTITY,
+    CONF_ODOMETER_SNAPSHOT,
+    CONF_PRICE_ENTITY,
     CONF_STATION_ID,
+    CONF_STATION_LAT,
+    CONF_STATION_LON,
     CONF_STATION_NAME,
     CONF_UPDATE_INTERVAL,
     CONF_STATIC_FRIENDLY_NAME,
     CONF_TARIFF_PRICE_PER_KWH,
     CONF_TARIFF_BASE_FEE,
     DEFAULT_AUTO_API_KEY,
+    DEFAULT_AUTO_DISCOVERY,
     DEFAULT_TARIFF_BASE_FEE,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    ENTRY_TYPE_TEMPORARY,
+    ENTRY_TYPE_WALLBOX,
 )
-from .coordinator import fetch_api_key, get_api_headers
+from .coordinator import async_search_stations, fetch_api_key, get_api_headers
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -49,6 +59,8 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         super().__init__()
         self.station_data: dict[str, Any] | None = None
         self._nearby_stations: list[dict[str, Any]] = []
+        self._pending_car_action: str | None = None
+        self._selected_car_entry_id: str | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -148,6 +160,12 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_search_map()
             if action == "browse":
                 return await self.async_step_browse_map()
+            if action == "temporary":
+                return await self.async_step_temporary()
+            if action == "wallbox":
+                return await self.async_step_wallbox()
+            if action == "auto_find":
+                return await self.async_step_auto_find()
             return await self.async_step_enter_station_id()
 
         return self.async_show_form(
@@ -159,6 +177,9 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             "search": "Search Nearby Stations (Recommended)",
                             "browse": "Browse EnBW Map & Enter Station ID",
                             "manual": "Enter Station ID Directly",
+                            "temporary": "Temporary Station (removed after next drive)",
+                            "wallbox": "Custom Wallbox at Car's Location",
+                            "auto_find": "Find Station at Car's Current Location",
                         }
                     ),
                 }
@@ -339,6 +360,261 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         except asyncio.TimeoutError as err:
             raise ConnectionError("Search request timed out") from err
+
+    def _get_car_entries(self) -> dict[str, str]:
+        """Return {entry_id: car_name} for all configured car entries."""
+        return {
+            e.entry_id: e.data.get("car_name", e.entry_id)
+            for e in self.hass.config_entries.async_entries(DOMAIN)
+            if e.data.get("entry_type") == "car"
+        }
+
+    def _resolve_car_gps(self, car_entry_id: str) -> tuple[float, float, float | None]:
+        """Read GPS from the car's device_tracker.
+
+        Returns (lat, lon, gps_accuracy).
+        Raises ValueError when the GPS position is unavailable.
+        """
+        car_entry = next(
+            (
+                e
+                for e in self.hass.config_entries.async_entries(DOMAIN)
+                if e.entry_id == car_entry_id
+            ),
+            None,
+        )
+        if car_entry is None:
+            raise ValueError("Car entry not found")
+        tracker_entity = car_entry.data.get("device_tracker")
+        state = self.hass.states.get(tracker_entity)
+        if state is None or state.state in ("unavailable", "unknown"):
+            raise ValueError("GPS unavailable")
+        lat = state.attributes.get("latitude")
+        lon = state.attributes.get("longitude")
+        if lat is None or lon is None:
+            raise ValueError("GPS unavailable — no coordinates in tracker attributes")
+        raw_acc = state.attributes.get("gps_accuracy")
+        gps_accuracy = (
+            raw_acc if raw_acc is not None else state.attributes.get("accuracy")
+        )
+        return float(lat), float(lon), gps_accuracy
+
+    async def async_step_pick_car(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Show a car selector when multiple cars are configured."""
+        if user_input is not None:
+            self._selected_car_entry_id = user_input.get(CONF_CAR_ENTRY_ID)
+            action = self._pending_car_action or ""
+            if action == "temporary":
+                return await self.async_step_temporary()
+            if action == "wallbox":
+                return await self.async_step_wallbox()
+            if action == "auto_find":
+                return await self.async_step_auto_find()
+            return await self.async_step_station()
+
+        car_entries = self._get_car_entries()
+        return self.async_show_form(
+            step_id="pick_car",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_CAR_ENTRY_ID): vol.In(car_entries),
+                }
+            ),
+        )
+
+    async def async_step_temporary(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Config flow for a temporary (one-off) charging station."""
+        errors: dict[str, str] = {}
+
+        # Resolve car — auto-select if only one car is configured.
+        if self._selected_car_entry_id is None:
+            car_entries = self._get_car_entries()
+            if not car_entries:
+                return self.async_abort(reason="no_car_entries")
+            if len(car_entries) > 1:
+                self._pending_car_action = "temporary"
+                return await self.async_step_pick_car()
+            self._selected_car_entry_id = next(iter(car_entries))
+
+        if user_input is not None:
+            try:
+                lat, lon, _ = self._resolve_car_gps(self._selected_car_entry_id)
+            except ValueError:
+                errors["base"] = "gps_unavailable"
+            else:
+                # Snapshot current odometer so we know when the car has moved.
+                car_entry = next(
+                    (
+                        e
+                        for e in self.hass.config_entries.async_entries(DOMAIN)
+                        if e.entry_id == self._selected_car_entry_id
+                    ),
+                    None,
+                )
+                odometer_snapshot = 0.0
+                if car_entry:
+                    odo_entity = car_entry.data.get(CONF_ODOMETER_ENTITY)
+                    if odo_entity:
+                        odo_state = self.hass.states.get(odo_entity)
+                        if odo_state and odo_state.state not in (
+                            "unavailable",
+                            "unknown",
+                        ):
+                            try:
+                                odometer_snapshot = float(odo_state.state)
+                            except (TypeError, ValueError):
+                                pass
+                tariff_price = user_input.get(CONF_TARIFF_PRICE_PER_KWH, 0.0)
+                tariff_base = user_input.get(
+                    CONF_TARIFF_BASE_FEE, DEFAULT_TARIFF_BASE_FEE
+                )
+                return self.async_create_entry(
+                    title="Temporary Charging Station",
+                    data={
+                        "entry_type": ENTRY_TYPE_TEMPORARY,
+                        CONF_CAR_ENTRY_ID: self._selected_car_entry_id,
+                        CONF_STATION_LAT: lat,
+                        CONF_STATION_LON: lon,
+                        CONF_ODOMETER_SNAPSHOT: odometer_snapshot,
+                    },
+                    options={
+                        CONF_TARIFF_PRICE_PER_KWH: tariff_price,
+                        CONF_TARIFF_BASE_FEE: tariff_base,
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="temporary",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_TARIFF_PRICE_PER_KWH): vol.All(
+                        vol.Coerce(float), vol.Range(min=0)
+                    ),
+                    vol.Optional(
+                        CONF_TARIFF_BASE_FEE, default=DEFAULT_TARIFF_BASE_FEE
+                    ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_wallbox(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Config flow for a custom wallbox at the car's current location."""
+        errors: dict[str, str] = {}
+
+        # Resolve car — auto-select if only one car is configured.
+        if self._selected_car_entry_id is None:
+            car_entries = self._get_car_entries()
+            if not car_entries:
+                return self.async_abort(reason="no_car_entries")
+            if len(car_entries) > 1:
+                self._pending_car_action = "wallbox"
+                return await self.async_step_pick_car()
+            self._selected_car_entry_id = next(iter(car_entries))
+
+        if user_input is not None:
+            try:
+                lat, lon, _ = self._resolve_car_gps(self._selected_car_entry_id)
+            except ValueError:
+                errors["base"] = "gps_unavailable"
+            else:
+                return self.async_create_entry(
+                    title="Wallbox",
+                    data={
+                        "entry_type": ENTRY_TYPE_WALLBOX,
+                        CONF_CAR_ENTRY_ID: self._selected_car_entry_id,
+                        CONF_STATION_LAT: lat,
+                        CONF_STATION_LON: lon,
+                    },
+                    options={
+                        CONF_CO2_ENTITY: user_input.get(CONF_CO2_ENTITY),
+                        CONF_PRICE_ENTITY: user_input.get(CONF_PRICE_ENTITY),
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="wallbox",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_CO2_ENTITY): EntitySelector(
+                        EntitySelectorConfig(domain="sensor")
+                    ),
+                    vol.Required(CONF_PRICE_ENTITY): EntitySelector(
+                        EntitySelectorConfig(domain="sensor")
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_auto_find(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Search for an EnBW station at the car's current GPS position."""
+        # Resolve car — auto-select if only one car is configured.
+        if self._selected_car_entry_id is None:
+            car_entries = self._get_car_entries()
+            if not car_entries:
+                return self.async_abort(reason="no_car_entries")
+            if len(car_entries) > 1:
+                self._pending_car_action = "auto_find"
+                return await self.async_step_pick_car()
+            self._selected_car_entry_id = next(iter(car_entries))
+
+        try:
+            lat, lon, _ = self._resolve_car_gps(self._selected_car_entry_id)
+        except ValueError:
+            return self.async_show_form(
+                step_id="auto_find",
+                data_schema=vol.Schema({}),
+                errors={"base": "gps_unavailable"},
+            )
+
+        session = async_get_clientsession(self.hass)
+        stations: list[dict[str, Any]] = []
+        for radius_m in (50, 100, 200):
+            try:
+                stations = await async_search_stations(session, lat, lon, radius_m)
+                if stations:
+                    break
+            except ConnectionError as err:
+                _LOGGER.error("Station search failed at radius %d m: %s", radius_m, err)
+                return self.async_show_form(
+                    step_id="auto_find",
+                    data_schema=vol.Schema({}),
+                    errors={"base": "connection_error"},
+                )
+
+        if not stations:
+            return self.async_show_form(
+                step_id="auto_find",
+                data_schema=vol.Schema({}),
+                errors={"base": "no_stations_found_nearby"},
+            )
+
+        self._nearby_stations = stations
+        return await self.async_step_select_station()
+
+    async def async_step_integration_discovery(
+        self, discovery_info: dict[str, Any]
+    ) -> FlowResult:
+        """Handle integration discovery triggered by CarChargingSensor.
+
+        Called with data = {"stations": [...], "car_entry_id": "<entry_id>"}.
+        Presents the normal station-selection + configure-settings flow.
+        """
+        stations = discovery_info.get("stations", [])
+        if not stations:
+            return self.async_abort(reason="no_station_data")
+        self._nearby_stations = stations
+        self._selected_car_entry_id = discovery_info.get("car_entry_id")
+        return await self.async_step_select_station()
 
     async def async_step_enter_station_id(
         self, user_input: dict[str, Any] | None = None
@@ -601,6 +877,9 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         options={
                             **entry.options,
                             "electricitymap_api_key": electricitymap_api_key,
+                            CONF_AUTO_DISCOVERY: user_input.get(
+                                CONF_AUTO_DISCOVERY, DEFAULT_AUTO_DISCOVERY
+                            ),
                         },
                         reason="reconfigure_successful",
                     )
@@ -630,12 +909,82 @@ class EnBWChargingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             "electricitymap_api_key",
                             default=entry.options.get("electricitymap_api_key", ""),
                         ): str,
+                        vol.Optional(
+                            CONF_AUTO_DISCOVERY,
+                            default=entry.options.get(
+                                CONF_AUTO_DISCOVERY, DEFAULT_AUTO_DISCOVERY
+                            ),
+                        ): bool,
                     }
                 ),
                 errors=errors,
             )
 
-        # Station: allow updating interval and friendly name
+        # Wallbox: allow updating price and CO2 entities.
+        if entry.data.get("entry_type") == ENTRY_TYPE_WALLBOX:
+            if user_input is not None:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    options={
+                        **entry.options,
+                        CONF_CO2_ENTITY: user_input.get(CONF_CO2_ENTITY),
+                        CONF_PRICE_ENTITY: user_input.get(CONF_PRICE_ENTITY),
+                    },
+                    reason="reconfigure_successful",
+                )
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=vol.Schema(
+                    {
+                        vol.Optional(
+                            CONF_CO2_ENTITY,
+                            default=entry.options.get(CONF_CO2_ENTITY),
+                        ): EntitySelector(EntitySelectorConfig(domain="sensor")),
+                        vol.Required(
+                            CONF_PRICE_ENTITY,
+                            default=entry.options.get(CONF_PRICE_ENTITY, ""),
+                        ): EntitySelector(EntitySelectorConfig(domain="sensor")),
+                    }
+                ),
+                errors=errors,
+            )
+
+        # Temporary station: allow updating tariff.
+        if entry.data.get("entry_type") == ENTRY_TYPE_TEMPORARY:
+            if user_input is not None:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    options={
+                        **entry.options,
+                        CONF_TARIFF_PRICE_PER_KWH: user_input.get(
+                            CONF_TARIFF_PRICE_PER_KWH
+                        ),
+                        CONF_TARIFF_BASE_FEE: user_input.get(
+                            CONF_TARIFF_BASE_FEE, DEFAULT_TARIFF_BASE_FEE
+                        ),
+                    },
+                    reason="reconfigure_successful",
+                )
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(
+                            CONF_TARIFF_PRICE_PER_KWH,
+                            default=entry.options.get(CONF_TARIFF_PRICE_PER_KWH, 0.0),
+                        ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                        vol.Optional(
+                            CONF_TARIFF_BASE_FEE,
+                            default=entry.options.get(
+                                CONF_TARIFF_BASE_FEE, DEFAULT_TARIFF_BASE_FEE
+                            ),
+                        ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                    }
+                ),
+                errors=errors,
+            )
+
+        # EnBW station: allow updating interval and friendly name.
         current_interval = entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
         current_name = entry.data.get(CONF_STATIC_FRIENDLY_NAME, "")
         if user_input is not None:
@@ -686,6 +1035,9 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
             if user_input is not None:
                 return self.async_create_entry(title="", data=user_input)
             current_key = self.config_entry.options.get("electricitymap_api_key", "")
+            current_discovery = self.config_entry.options.get(
+                CONF_AUTO_DISCOVERY, DEFAULT_AUTO_DISCOVERY
+            )
             return self.async_show_form(
                 step_id="init",
                 data_schema=vol.Schema(
@@ -693,12 +1045,57 @@ class EnBWChargingOptionsFlow(config_entries.OptionsFlow):
                         vol.Required(
                             "electricitymap_api_key", default=current_key
                         ): str,
+                        vol.Optional(
+                            CONF_AUTO_DISCOVERY, default=current_discovery
+                        ): bool,
                     }
                 ),
             )
 
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
+
+        entry_type = self.config_entry.data.get("entry_type")
+
+        if entry_type == ENTRY_TYPE_WALLBOX:
+            return self.async_show_form(
+                step_id="init",
+                data_schema=vol.Schema(
+                    {
+                        vol.Optional(
+                            CONF_CO2_ENTITY,
+                            default=self.config_entry.options.get(CONF_CO2_ENTITY),
+                        ): EntitySelector(EntitySelectorConfig(domain="sensor")),
+                        vol.Required(
+                            CONF_PRICE_ENTITY,
+                            default=self.config_entry.options.get(
+                                CONF_PRICE_ENTITY, ""
+                            ),
+                        ): EntitySelector(EntitySelectorConfig(domain="sensor")),
+                    }
+                ),
+            )
+
+        if entry_type == ENTRY_TYPE_TEMPORARY:
+            tariff_price = self.config_entry.options.get(CONF_TARIFF_PRICE_PER_KWH, 0.0)
+            tariff_base = self.config_entry.options.get(
+                CONF_TARIFF_BASE_FEE, DEFAULT_TARIFF_BASE_FEE
+            )
+            return self.async_show_form(
+                step_id="init",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(
+                            CONF_TARIFF_PRICE_PER_KWH,
+                            default=tariff_price,
+                        ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                        vol.Optional(
+                            CONF_TARIFF_BASE_FEE,
+                            default=tariff_base,
+                        ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                    }
+                ),
+            )
 
         update_interval = self.config_entry.options.get(
             CONF_UPDATE_INTERVAL

@@ -12,13 +12,16 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 ## Features
 
 - **Car Green-Charging Tracker**: Add your car and its GPS tracker to see live CO₂ intensity, energy mix, and accumulated charging stats from [electricityMaps](https://electricitymaps.com/)
+- **Persistent Accumulators**: Energy, CO₂, and cost totals survive Home Assistant restarts — nothing is lost
+- **Proximity-Based Billing**: Costs are automatically billed when the car is near a configured station. One-off session base fees are applied once per session start; per-kWh cost accrues continuously
+- **Multiple Station Types**: EnBW public stations, custom home wallboxes, and temporary one-off stops — all handled with accurate billing
+- **Auto-Discovery**: Optionally let SmartCharge detect nearby EnBW stations automatically while the car is charging and prompt you to add them
 - **Easy Configuration**: Search nearby stations on a map or enter a station ID directly — one config entry per station
-- **Custom Friendly Name**: Set a custom static part of the sensor's friendly name during setup or reconfiguration. By default, this uses the EVSE code (e.g. `MVV`) and station number (e.g. `MVV_station_829151`).
-- **Single Entity per Station**: One sensor per station showing `available` or `occupied`, with a dynamic name like `2 / 5 - StationName`. For stations with more than 9 charge points, the available count is spaced (e.g. `1 0 / 10 - StationName`).
+- **Custom Friendly Name**: Set a custom static part of the sensor's friendly name during setup or reconfiguration
+- **Single Entity per Station**: One sensor per station showing `available` or `occupied`, with a dynamic name like `2 / 5 - StationName`. For stations with more than 9 charge points, the available count is spaced (e.g. `1 0 / 10 - StationName`)
 - **Charge Point Details**: Every charge point's status, power, and connector type exposed as entity attributes
 - **Occupancy Tracking**: Persistent occupancy histograms by hour-of-day and weekday, accumulating over time and surviving restarts
 - **Map Integration**: GPS coordinates as attributes so the sensor appears on the HA map
-- **Location Data**: GPS coordinates and address as attributes on each station sensor
 
 ## Installation
 
@@ -41,7 +44,7 @@ A Home Assistant integration for monitoring EnBW electric vehicle charging stati
 1. Go to Settings → Devices & Services
 2. Click "Add Integration"
 3. Search for "SmartCharge"
-4. **Choose what to add**: a **Car** (green-charging tracker) or a **Charging Station** (EnBW availability monitor)
+4. **Choose what to add**: a **Car** (green-charging tracker) or a **Charging Station**
 
 ### Adding a Car
 
@@ -53,15 +56,28 @@ To track multiple cars, add the integration once per car.
 
 ### Adding a Charging Station
 
-5. Choose **Search Nearby Stations** (recommended) to find stations on a map, or enter a station ID manually
-6. If searching: drag the map pin to your area, adjust the radius, then pick a station from the results
-7. Configure the update interval (60–3600 seconds, default 300)
-8. Optionally set a custom static part of the friendly name. If left blank, the default is the EVSE code and station number (e.g. `MVV_station_829151`).
-9. Set the **tariff price** (ct/kWh) — required. Optionally set a **base fee** (ct per session) for proximity-based billing to cars.
+Choose from five station types:
 
-One sensor is created and grouped under the **SmartCharge hub device** as a child device named after the friendly name.
+#### Search Nearby Stations (Recommended)
+Drag the map pin to your area, adjust the radius, pick a station from the results, and configure the update interval and tariff.
 
-To monitor multiple stations, add the integration once per station.
+#### Browse EnBW Map & Enter Station ID
+Manually look up a station on the EnBW map and enter its ID.
+
+#### Find Station at Car's Current Location
+Search for an EnBW station at the car's current GPS position. The search expands from 50 m → 100 m → 200 m until a station is found.
+
+#### Temporary Station (removed after next drive)
+Register a one-off charging stop using the car's **current GPS position** as the station location. The entry is automatically deleted once the car's odometer increases — i.e., after driving away. Requires at least one car entry to be configured.
+
+#### Custom Wallbox
+Add a fixed wallbox at the car's current GPS location. Provide a **live price entity** (ct/kWh) and optionally a **live CO₂ intensity entity** (gCO₂/kWh). When a CO₂ entity is provided it is used instead of the electricityMap API. Requires at least one car entry to be configured.
+
+> **Note**: Temporary stations and wallboxes create a lightweight config entry with no sensor entities. They exist solely to supply location and tariff data to the car tracker's proximity-billing logic.
+
+### Auto-Discovery
+
+When **Automatically discover charging stations while charging** is enabled in the car options, SmartCharge will search for nearby EnBW stations each time the car starts charging at an unrecognised location. If stations are found, a notification appears in the HA UI prompting you to add the station permanently. Only one discovery attempt is made per charging session.
 
 ## Car Tracking (Green Charging)
 
@@ -72,9 +88,9 @@ When you add a **Car** config entry, SmartCharge creates a **device** grouping s
 | Sensor | State | Unit | Icon |
 |---|---|---|---|
 | **CO2 Intensity** | Live grid CO₂ at the car's GPS location | gCO₂/kWh | `mdi:molecule-co2` |
-| **Accumulated Energy** | Total kWh charged since integration started | kWh | `mdi:ev-station` |
-| **Accumulated CO2** | Total gCO₂ produced for that energy | gCO₂ | `mdi:smog` |
-| **Accumulated Cost** | Total charging cost (proximity billing) | EUR | `mdi:currency-eur` |
+| **Accumulated Energy** | Total kWh charged (persisted across restarts) | kWh | `mdi:ev-station` |
+| **Accumulated CO2** | Total gCO₂ produced for that energy (persisted) | gCO₂ | `mdi:smog` |
+| **Accumulated Cost** | Total charging cost — proximity billing (persisted) | EUR | `mdi:currency-eur` |
 | **CO2 per km** | Average gCO₂ per km driven (requires odometer) | gCO₂/km | `mdi:leaf` |
 | **Cost per km** | Average charging cost per km driven | EUR/km | `mdi:cash-marker` |
 
@@ -85,24 +101,27 @@ The CO2 Intensity sensor has two attributes:
 | `energy_mix` | Live energy source breakdown, e.g. `{"solar": 20, "wind": 30, "nuclear": 40, "coal": 10}` |
 | `energy_histogram` | Accumulated kWh split by energy source over the session |
 
-Accumulated stats are kept in-memory and reset when HA restarts.
-
 ### Cost Billing (Proximity-Based)
 
-When the car is within range of a configured charging station that has a tariff set, charging costs are billed to the car automatically. The one-off base fee is added when a new session starts (car arrives at the station and begins charging); per-kWh cost accrues during the session.
+When the car is within range of a configured station that has a tariff set, charging costs are billed automatically:
+
+- A **base fee** (if configured) is added once when a new charging session begins
+- A **per-kWh cost** accrues continuously while charging at that station
+- A billing session ends when power drops to zero or the car moves away
+
+For **wallboxes**, the price is read live from the configured price entity each poll cycle.  
+For **temporary stations**, the tariff is fixed at the time of adding.
 
 ### Updating Car Settings
 
-To update any car setting, go to the integration entry → **Reconfigure**. You can change the car name, device tracker, charging power sensor, and odometer sensor. To update the electricityMap API key, use **Configure** (Options).
+Use the integration entry → **Reconfigure** to update the car name, device tracker, power sensor, odometer sensor, electricityMap API key, or auto-discovery toggle. The same settings are also accessible under **Configure** (Options).
 
 ## Getting Station IDs (Manual Fallback)
 
 If you prefer to enter a station ID directly, you can find it using your browser's developer tools:
 
 1. Open the [EnBW charging map](https://www.enbw.com/elektromobilitaet/produkte/mobilityplus-app/ladestation-finden/map)
-2. Open your browser's developer tools:
-   - **Chrome**: Press `F12` or `Ctrl+Shift+I`, then go to the **Network** tab
-   - **Firefox**: Press `F12` or `Ctrl+Shift+I`, then go to the **Network** tab
+2. Open your browser's developer tools (press `F12`), then go to the **Network** tab
 3. Click on a charging station on the map
 4. In the Network tab, look for a request to the EnBW API, e.g.:
    ```
@@ -120,18 +139,15 @@ Each config entry creates a **device** in HA. Going to **Settings → Devices & 
 - **SmartCharge hub device**: a single parent device created automatically when you add your first charging station.
 - **Station devices**: each station is a child of the SmartCharge hub, named after its static friendly name (e.g. `MVV_station_829151`). Clicking the hub shows all stations underneath it.
 
+> Temporary stations and wallboxes have no associated sensor entities or device card — they are configuration-only entries invisible on the Devices page.
+
 ## Entities
 
 ### Car entry (6 sensors per car)
 
 See the [Car Tracking](#car-tracking-green-charging) section above.
 
-### Station entry (1 sensor per station)
-
-You can reconfigure the integration at any time via the Home Assistant UI:
-
-- **Reconfigure**: update the update interval and static friendly name
-- **Configure** (Options): update API key settings and tariff
+### EnBW Station entry (1 sensor per station)
 
 - **State**: `available` (at least one charge point is free) or `occupied` (all charge points in use)
 - **Dynamic Name**: Updates to show availability, e.g. `2 / 5 - Hauptstraße 10, Stuttgart`. For stations with more than 9 charge points, the available count is spaced (e.g. `1 0 / 10 - StationName`).
@@ -147,6 +163,15 @@ You can reconfigure the integration at any time via the Home Assistant UI:
 - **Per charge point** (keyed by EVSE ID): Status, power in kW, and connector type, e.g. `available | 50 kW | CCS`
 - `occupancy_weekday`: Average occupancy % by day of week (accumulated over time)
 - `occupancy_hourly`: Average occupancy % by hour of day (accumulated over time)
+
+### Reconfiguring entries
+
+| Entry type | Reconfigure | Options (Configure) |
+|---|---|---|
+| **Car** | Car name, tracker, power sensor, odometer, API key, auto-discovery | API key, auto-discovery |
+| **EnBW Station** | Update interval, friendly name | Update interval, API key mode, tariff |
+| **Wallbox** | Price entity, CO₂ entity | Price entity, CO₂ entity |
+| **Temporary Station** | Tariff price, base fee | Tariff price, base fee |
 
 ## Dashboard: Occupancy Histograms with Plotly Graph Card
 
@@ -238,6 +263,14 @@ automation:
 - Verify internet connectivity
 - Review Home Assistant logs for errors (`custom_components.smartcharge`)
 
+### electricityMap API key errors
+
+If you see `electricityMap returned HTTP 401` in the logs, your API key is invalid or expired. Update it via **Settings → Devices & Services → SmartCharge → Reconfigure** (or Configure) on the car entry. The warning is logged once and then suppressed until the key is updated.
+
+### Accumulated stats reset unexpectedly
+
+Energy, CO₂, and cost accumulators are persisted to `.storage/smartcharge.car.<entry_id>` and survive restarts. If values appear to reset, check that the `.storage` folder is writable and not excluded from your backup strategy.
+
 ### Data not updating
 
 - Check the update interval setting in the integration options
@@ -264,3 +297,4 @@ MIT License - See LICENSE file for details
 ## Support
 
 For issues and feature requests, please [open an issue](https://github.com/iandresari/smartcharge/issues).
+

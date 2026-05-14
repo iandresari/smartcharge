@@ -30,11 +30,10 @@ from .const import (
     DEFAULT_AUTO_API_KEY,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    STORAGE_VERSION,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
-
-STORAGE_VERSION = 1
 
 # Module-level cache shared across all coordinator instances
 _cached_api_key: str | None = None
@@ -86,6 +85,55 @@ async def fetch_api_key(session: aiohttp.ClientSession) -> str:
 def get_api_headers(api_key: str) -> dict[str, str]:
     """Build API headers with the given subscription key."""
     return {**API_HEADERS, "Ocp-Apim-Subscription-Key": api_key}
+
+
+async def async_search_stations(
+    session: aiohttp.ClientSession,
+    lat: float,
+    lon: float,
+    radius_m: float,
+) -> list[dict]:
+    """Search for EnBW charging stations within *radius_m* metres of lat/lon.
+
+    Tries the requested radius first.  If the API returns no results the
+    caller is responsible for retrying with a larger radius.
+    Raises ConnectionError on network/API failures.
+    """
+    api_key = await fetch_api_key(session)
+    headers = get_api_headers(api_key)
+
+    radius_deg = radius_m / 111_000.0
+    url = (
+        f"{API_BASE_URL}/chargestations"
+        f"?fromLat={lat - radius_deg}&toLat={lat + radius_deg}"
+        f"&fromLon={lon - radius_deg}&toLon={lon + radius_deg}"
+        f"&grouping=false"
+    )
+
+    try:
+        async with session.get(
+            url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)
+        ) as response:
+            if response.status in (401, 403):
+                api_key = await fetch_api_key(session)
+                headers = get_api_headers(api_key)
+                async with session.get(
+                    url,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as retry:
+                    if retry.status != 200:
+                        raise ConnectionError(f"API returned HTTP {retry.status}")
+                    data = await retry.json()
+            elif response.status != 200:
+                raise ConnectionError(f"API returned HTTP {response.status}")
+            else:
+                data = await response.json()
+
+        return data if isinstance(data, list) else []
+
+    except asyncio.TimeoutError as err:
+        raise ConnectionError("Station search request timed out") from err
 
 
 def _empty_hourly_stats() -> dict[str, dict[str, int]]:
